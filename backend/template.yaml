@@ -25,24 +25,25 @@ Globals:
     Runtime: python3.11
     Architectures:
       - arm64
+
   HttpApi:
     CorsConfiguration:
       AllowOrigins:
         - "http://localhost:5173"
         - "http://127.0.0.1:5173"
         - "http://localhost:4173"
+        - "https://main.d374q6vzj4flmw.amplifyapp.com"
         - !If
           - HasAmplifyDomain
           - !Ref AmplifyDomain
           - !Ref AWS::NoValue
-        - "*"
       AllowMethods:
         - POST
         - OPTIONS
       AllowHeaders:
         - content-type
-        - authorization
       AllowCredentials: false
+      MaxAge: 600
 
 Conditions:
   HasAmplifyDomain: !Not [!Equals [!Ref AmplifyDomain, ""]]
@@ -67,6 +68,11 @@ Resources:
       Environment:
         Variables:
           GEMINI_API_KEY: !Ref GeminiApiKey
+          # Belt-and-suspenders: also set in Lambda env so app.py CORS header matches
+          ALLOWED_ORIGIN: !If
+            - HasAmplifyDomain
+            - !Ref AmplifyDomain
+            - "https://main.d374q6vzj4flmw.amplifyapp.com"
       Events:
         Solve:
           Type: HttpApi
@@ -83,7 +89,6 @@ Resources:
           Properties:
             Path: /integral-order
             Method: post
-        # OPTIONS pre-flight for each route
         SolveOptions:
           Type: HttpApi
           Properties:

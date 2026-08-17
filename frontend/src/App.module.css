@@ -15,30 +15,31 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--sp-4);
-  height: 52px;
+  padding: 0 var(--sp-3);
+  height: 48px;
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-raised);
   position: sticky;
   top: 0;
   z-index: 100;
+  gap: var(--sp-3);
   transition: background-color var(--duration-base) var(--ease-out),
               border-color var(--duration-base) var(--ease-out);
-  gap: var(--sp-3);
 }
 
 .brand {
   font-family: var(--font-headline);
-  font-size: 16px;
+  font-size: 15px;
   letter-spacing: 0.14em;
   color: var(--content-primary);
   flex-shrink: 0;
+  text-transform: uppercase;
 }
 
 .topBarCenter {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
   overflow-x: auto;
   scrollbar-width: none;
   flex: 1;
@@ -50,7 +51,7 @@
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   letter-spacing: 0.04em;
-  padding: 4px 10px;
+  padding: 3px 9px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -75,10 +76,9 @@
   flex-shrink: 0;
 }
 
-/* Theme toggle button */
 .themeBtn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -88,14 +88,11 @@
   align-items: center;
   justify-content: center;
   transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out);
-  font-size: 15px;
+              color var(--duration-fast) var(--ease-out);
 }
 .themeBtn:hover {
   background: var(--surface-hover);
   color: var(--content-primary);
-  border-color: var(--content-tertiary);
 }
 
 /* ── Loading banner ─────────────────────────────────────────────────────── */
@@ -103,19 +100,70 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+/* ── Mobile panel tabs (hidden on desktop) ──────────────────────────────── */
+.mobileTabs {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .mobileTabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-raised);
+    position: sticky;
+    top: 48px;
+    z-index: 99;
+  }
+}
+
+.mobileTab {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  padding: var(--sp-2) var(--sp-2);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--content-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.mobileTab:last-child { border-right: none; }
+.mobileTabActive {
+  background: var(--surface-sunken);
+  color: var(--content-primary);
+  font-weight: 700;
+}
+.mobileTabBadge {
+  font-size: 10px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0 5px;
+  line-height: 16px;
+}
+
 /* ── Main layout ────────────────────────────────────────────────────────── */
 .main {
   flex: 1;
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 0; /* allow grid rows to shrink to fit content */
+  min-height: 0;
 }
 
 @media (min-width: 900px) {
   .main {
-    /* Left panel gets more room — equation + steps need space for explanations */
     grid-template-columns: 480px 1fr;
   }
+  .mobileTabs { display: none; }
+  .mobileHidden { display: flex !important; }
+  .mobileHiddenGraph { display: flex !important; }
 }
 
 @media (min-width: 1280px) {
@@ -124,7 +172,17 @@
   }
 }
 
-/* ── Area toggle in topbar ── */
+/* Mobile panel visibility */
+@media (max-width: 899px) {
+  .mobileHidden {
+    display: none !important;
+  }
+  .mobileHiddenGraph {
+    display: none !important;
+  }
+}
+
+/* ── Area toggle ────────────────────────────────────────────────────────── */
 .areaToggle {
   display: flex;
   align-items: center;
@@ -137,7 +195,6 @@
   color: var(--content-secondary);
   letter-spacing: 0.04em;
 }
-/* Reuse toggle styles from EquationInput */
 .toggle {
   position: relative;
   display: inline-block;
@@ -171,6 +228,7 @@
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-raised);
   min-height: 36px;
+  flex-shrink: 0;
 }
 .eqTabs::-webkit-scrollbar { display: none; }
 
@@ -188,7 +246,7 @@
   font-size: var(--text-tiny);
   letter-spacing: 0.04em;
   white-space: nowrap;
-  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  transition: background var(--duration-fast), color var(--duration-fast);
   border-right: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -203,7 +261,6 @@
   width: 6px; height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  transition: background var(--duration-fast);
 }
 
 .eqTabLabel {
@@ -245,27 +302,33 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-color);
-  animation: fadeUp var(--duration-slow) var(--ease-out) both;
-  /* On desktop: occupy full viewport height minus topbar so StepPanel can scroll */
   min-height: 0;
   overflow: hidden;
+  animation: fadeUp var(--duration-slow) var(--ease-out) both;
 }
 
 @media (min-width: 900px) {
   .leftPanel {
-    height: calc(100dvh - 52px); /* 52px = topbar */
+    height: calc(100dvh - 48px);
     position: sticky;
-    top: 52px;
+    top: 48px;
   }
+}
+
+.inputSection {
+  flex-shrink: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .stepWrapper {
   flex: 1;
   border-top: 1px solid var(--border-color);
   overflow-y: auto;
-  /* Custom scrollbar — subtle */
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+  min-height: 0;
 }
 .stepWrapper::-webkit-scrollbar { width: 4px; }
 .stepWrapper::-webkit-scrollbar-track { background: transparent; }
@@ -275,9 +338,9 @@
 .rightPanel {
   display: flex;
   flex-direction: column;
-  animation: fadeUp var(--duration-slow) var(--ease-out) 60ms both;
   min-height: 0;
   overflow-y: auto;
+  animation: fadeUp var(--duration-slow) var(--ease-out) 60ms both;
 }
 
 /* Graph mode segmented control */
@@ -285,6 +348,7 @@
   display: flex;
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-raised);
+  flex-shrink: 0;
 }
 
 .tab {
@@ -317,6 +381,7 @@
 .numericSample {
   border-top: 1px solid var(--border-color);
   background: var(--surface-raised);
+  flex-shrink: 0;
   animation: fadeIn var(--duration-base) var(--ease-out) both;
 }
 
@@ -343,7 +408,7 @@
   border-right: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
-.numericRow:nth-child(n+5) { border-bottom: none; }
+.numericRow:last-child { border-right: none; }
 
 .numericCell {
   font-family: var(--font-mono);
@@ -356,18 +421,20 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-4);
   border-top: 1px solid var(--border-color);
-  background: var(--surface-raised);
+  background: var(--surface-sunken);
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   letter-spacing: 0.05em;
   color: var(--content-tertiary);
+  flex-shrink: 0;
 }
 @media (max-width: 768px) {
   .footer {
     flex-direction: column;
-    gap: var(--sp-1);
+    gap: 2px;
     text-align: center;
+    padding: var(--sp-2);
   }
 }

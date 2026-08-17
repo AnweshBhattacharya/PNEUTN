@@ -6,7 +6,7 @@
  * GraphCanvas2D receives all equations at once and renders them together,
  * with optional area shading between the first two.
  */
-import React, { useState, useCallback, useEffect, useId } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
@@ -17,15 +17,14 @@ import LoadingBar from './components/shared/LoadingBar'
 import { solve as callSolve } from './lib/apiClient'
 import styles from './App.module.css'
 
-// Palette mirrors GraphCanvas2D.jsx
-const EQ_COLORS = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
-const EQ_COLORS_DARK = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
+const EQ_COLORS       = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
+const EQ_COLORS_DARK  = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
 
 const EXAMPLE_EXPRS = [
-  { label: 'x² sin x',  expr: 'x^2*sin(x)', wrt: 'x', operation: 'derivative' },
-  { label: 'eˣ cos x',  expr: 'exp(x)*cos(x)', wrt: 'x', operation: 'derivative' },
-  { label: '∫ x² [0,3]',expr: 'x^2', wrt: 'x', operation: 'integral', bounds: [0, 3] },
-  { label: 'x²y³ ∂/∂x', expr: 'x^2*y^3', wrt: 'x', operation: 'derivative' },
+  { label: 'x² sin x',   expr: 'x^2*sin(x)',   wrt: 'x', operation: 'derivative' },
+  { label: 'eˣ cos x',   expr: 'exp(x)*cos(x)', wrt: 'x', operation: 'derivative' },
+  { label: '∫ x² [0,3]', expr: 'x^2',           wrt: 'x', operation: 'integral', bounds: [0, 3] },
+  { label: 'x²y³ ∂/∂x',  expr: 'x^2*y^3',       wrt: 'x', operation: 'derivative' },
 ]
 
 let _nextId = 1
@@ -35,7 +34,7 @@ function makeEq(expr = 'x^2') {
 
 function SunIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="5"/>
       <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
@@ -47,7 +46,7 @@ function SunIcon() {
 }
 function MoonIcon() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
     </svg>
@@ -74,16 +73,17 @@ function useTheme() {
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
 
-  // Multi-equation state
-  const [equations, setEquations] = useState([makeEq('x^2')])
-  const [activeId, setActiveId] = useState(equations[0].id)
-  const [graphMode, setGraphMode] = useState('2d')
+  const [equations, setEquations]   = useState([makeEq('x^2')])
+  const [activeId, setActiveId]     = useState(equations[0].id)
+  const [graphMode, setGraphMode]   = useState('2d')
   const [riemannRects, setRiemannRects] = useState([])
-  const [showArea, setShowArea] = useState(false)
+  const [showArea, setShowArea]     = useState(false)
+  // mobile panel toggle: 'input' | 'steps'
+  const [mobilePanel, setMobilePanel] = useState('input')
 
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
 
-  // ── equation list management ────────────────────────────────────────
+  // ── equation list management ──────────────────────────────────────────
   const addEquation = () => {
     if (equations.length >= 6) return
     const eq = makeEq('')
@@ -108,10 +108,12 @@ export default function App() {
     setEquations(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
   }, [])
 
-  // ── solve ──────────────────────────────────────────────────────────
+  // ── solve ──────────────────────────────────────────────────────────────
   const handleSolve = useCallback(async (params) => {
     const id = activeId
     updateEquation(id, { loading: true, error: null, result: null, steps: [] })
+    // Switch to steps panel on mobile after solve is triggered
+    setMobilePanel('steps')
     try {
       const data = await callSolve(params)
       updateEquation(id, {
@@ -127,33 +129,35 @@ export default function App() {
   }, [activeId, updateEquation])
 
   const loadExample = (example) => {
-    const id = activeId
-    updateEquation(id, { expr: example.expr, result: null, error: null, steps: [] })
+    updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
     setRiemannRects([])
   }
 
   const anyLoading = equations.some(e => e.loading)
-
-  // Build equations array for GraphCanvas
   const graphEquations = equations.map(e => ({ id: e.id, expr: e.expr }))
 
   return (
     <div className={styles.app}>
+
       {/* ── Top bar ── */}
       <header className={styles.topBar}>
-        <span className={styles.brand}>PNEUTN</span>
+        <span className={styles.brand}>Pneutn</span>
+
         <nav className={styles.topBarCenter} aria-label="Examples">
           {EXAMPLE_EXPRS.map((ex, i) => (
-            <button key={i} className={styles.exampleChip} onClick={() => loadExample(ex)} id={`example-${i}`}>
+            <button key={i} className={styles.exampleChip}
+              onClick={() => loadExample(ex)}>
               {ex.label}
             </button>
           ))}
         </nav>
+
         <div className={styles.topBarRight}>
           {equations.length >= 2 && (
             <label className={styles.areaToggle}>
               <span className={styles.toggle}>
-                <input type="checkbox" checked={showArea} onChange={e => setShowArea(e.target.checked)} />
+                <input type="checkbox" checked={showArea}
+                  onChange={e => setShowArea(e.target.checked)} />
                 <span className={styles.toggleTrack} />
                 <span className={styles.toggleThumb} />
               </span>
@@ -173,9 +177,29 @@ export default function App() {
         </div>
       )}
 
+      {/* ── Mobile panel switcher ── */}
+      <div className={styles.mobileTabs} role="tablist">
+        <button role="tab" aria-selected={mobilePanel === 'input'}
+          className={`${styles.mobileTab} ${mobilePanel === 'input' ? styles.mobileTabActive : ''}`}
+          onClick={() => setMobilePanel('input')}>
+          Input
+        </button>
+        <button role="tab" aria-selected={mobilePanel === 'graph'}
+          className={`${styles.mobileTab} ${mobilePanel === 'graph' ? styles.mobileTabActive : ''}`}
+          onClick={() => setMobilePanel('graph')}>
+          Graph
+        </button>
+        <button role="tab" aria-selected={mobilePanel === 'steps'}
+          className={`${styles.mobileTab} ${mobilePanel === 'steps' ? styles.mobileTabActive : ''}`}
+          onClick={() => setMobilePanel('steps')}>
+          Steps {activeEq.steps?.length > 0 && <span className={styles.mobileTabBadge}>{activeEq.steps.length}</span>}
+        </button>
+      </div>
+
       <main className={styles.main}>
-        {/* ── Left panel: input tabs + step panel ── */}
-        <aside className={styles.leftPanel}>
+        {/* ── Left panel: equation tabs + input + step panel ── */}
+        <aside className={`${styles.leftPanel} ${mobilePanel !== 'input' && mobilePanel !== 'steps' ? styles.mobileHidden : ''}`}>
+
           {/* Equation tabs */}
           <div className={styles.eqTabs}>
             {equations.map((eq, i) => {
@@ -183,44 +207,41 @@ export default function App() {
               const colors = dark ? EQ_COLORS_DARK : EQ_COLORS
               const color = colors[i % colors.length]
               return (
-                <button
-                  key={eq.id}
+                <button key={eq.id}
                   className={`${styles.eqTab} ${eq.id === activeId ? styles.eqTabActive : ''}`}
                   onClick={() => setActiveId(eq.id)}
-                  style={eq.id === activeId ? { borderTopColor: color } : {}}
-                >
+                  style={eq.id === activeId ? { borderTopColor: color } : {}}>
                   <span className={styles.eqDot} style={{ background: color }} />
                   <span className={styles.eqTabLabel}>
                     {eq.expr ? (eq.expr.length > 12 ? eq.expr.slice(0, 12) + '…' : eq.expr) : `f${i + 1}(x)`}
                   </span>
                   {equations.length > 1 && (
-                    <button
-                      className={styles.eqTabClose}
+                    <button className={styles.eqTabClose}
                       onClick={e => { e.stopPropagation(); removeEquation(eq.id) }}
-                      aria-label="Remove equation"
-                    >×</button>
+                      aria-label="Remove equation">×</button>
                   )}
                 </button>
               )
             })}
             {equations.length < 6 && (
-              <button className={styles.addEqBtn} onClick={addEquation} aria-label="Add equation" title="Add equation">
-                +
-              </button>
+              <button className={styles.addEqBtn} onClick={addEquation}
+                aria-label="Add equation" title="Add equation">+</button>
             )}
           </div>
 
-          {/* Active equation input */}
-          <EquationInput
-            key={activeEq.id}
-            value={activeEq.expr}
-            onChange={(expr) => updateExpr(activeEq.id, expr)}
-            onSolve={handleSolve}
-            loading={activeEq.loading}
-          />
+          {/* Input section — hidden on mobile when steps tab is active */}
+          <div className={`${styles.inputSection} ${mobilePanel === 'steps' ? styles.mobileHidden : ''}`}>
+            <EquationInput
+              key={activeEq.id}
+              value={activeEq.expr}
+              onChange={(expr) => updateExpr(activeEq.id, expr)}
+              onSolve={handleSolve}
+              loading={activeEq.loading}
+            />
+          </div>
 
-          {/* Step panel */}
-          <div className={styles.stepWrapper}>
+          {/* Step panel — full left panel on desktop, shown when steps tab active on mobile */}
+          <div className={`${styles.stepWrapper} ${mobilePanel === 'input' ? styles.mobileHidden : ''}`}>
             <StepPanel
               result={activeEq.result}
               steps={activeEq.steps ?? []}
@@ -232,7 +253,7 @@ export default function App() {
         </aside>
 
         {/* ── Right panel: graph + controls ── */}
-        <section className={styles.rightPanel}>
+        <section className={`${styles.rightPanel} ${mobilePanel !== 'graph' ? styles.mobileHiddenGraph : ''}`}>
           <div className={styles.graphTabs} role="tablist">
             {['2d', '3d'].map(mode => (
               <button key={mode} role="tab" aria-selected={graphMode === mode}
@@ -282,6 +303,11 @@ export default function App() {
           )}
         </section>
       </main>
+
+      <footer className={styles.footer}>
+        <span>Pneutn — anonymous · stateless · serverless</span>
+        <span>React + Three.js + SymPy + Gemini</span>
+      </footer>
     </div>
   )
 }

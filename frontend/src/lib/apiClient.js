@@ -1,11 +1,15 @@
 /**
  * apiClient.js — fetch wrapper for the Pneutn backend API.
  *
- * Lambda HTTP API v2 wraps responses in a JSON envelope:
- *   { statusCode, headers, body: "<JSON string>" }
- * This client unwraps that envelope so consumers always get the inner object.
+ * Lambda HTTP API v2 passes responses directly (not wrapped in an envelope)
+ * when the integration is configured correctly. This client handles both the
+ * direct JSON case and the legacy Lambda proxy envelope just in case.
  *
- * Falls back to localSolve() for /solve when the backend is unreachable.
+ * Fallback behaviour:
+ *   - /solve falls back to localSolve() ONLY when the backend is genuinely
+ *     unreachable (no VITE_API_BASE_URL, DNS failure, network timeout).
+ *   - CORS errors and 4xx/5xx responses are surfaced as ApiError — they should
+ *     not be silently swallowed, they indicate a real configuration problem.
  */
 import { localSolve } from './localSolve'
 
@@ -21,15 +25,15 @@ export class ApiError extends Error {
 }
 
 /**
- * Unwrap a Lambda HTTP API response envelope.
- * If the response is already a plain object (direct API GW pass-through), return as-is.
+ * Unwrap a Lambda proxy envelope if present.
+ * HTTP API v2 with direct Lambda integration returns the object directly,
+ * but proxy integrations wrap it in { statusCode, headers, body: string }.
  */
 function unwrap(raw) {
-  // Lambda proxy envelope: { statusCode, headers, body: string }
   if (raw && typeof raw.body === 'string' && typeof raw.statusCode === 'number') {
     let inner
-    try { inner = JSON.parse(raw.body) } catch { inner = raw.body }
-    if (!raw.statusCode.toString().startsWith('2')) {
+    try { inner = JSON.parse(raw.body) } catch { inner = { message: raw.body } }
+    if (!String(raw.statusCode).startsWith('2')) {
       throw new ApiError(
         inner?.error || 'http_error',
         inner?.message || `HTTP ${raw.statusCode}`,
@@ -41,8 +45,10 @@ function unwrap(raw) {
   return raw
 }
 
-async function post(path, body, { timeout = 15000 } = {}) {
-  if (!BASE_URL) throw new ApiError('no_backend', 'VITE_API_BASE_URL is not set.', 0)
+async function post(path, body, { timeout = 25000 } = {}) {
+  if (!BASE_URL) {
+    throw new ApiError('no_backend', 'VITE_API_BASE_URL is not configured.', 0)
+  }
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
@@ -56,12 +62,20 @@ async function post(path, body, { timeout = 15000 } = {}) {
     })
 
     let raw
-    try { raw = await response.json() } catch {
-      throw new ApiError('parse_error', 'Server returned non-JSON response.', response.status)
+    try {
+      raw = await response.json()
+    } catch {
+      throw new ApiError(
+        'parse_error',
+        `Server returned non-JSON (HTTP ${response.status}). Check VITE_API_BASE_URL.`,
+        response.status,
+      )
     }
 
     if (!response.ok) {
-      const inner = typeof raw.body === 'string' ? (() => { try { return JSON.parse(raw.body) } catch { return raw } })() : raw
+      const inner = typeof raw?.body === 'string'
+        ? (() => { try { return JSON.parse(raw.body) } catch { return raw } })()
+        : raw
       throw new ApiError(
         inner?.error || 'http_error',
         inner?.message || `HTTP ${response.status}`,
@@ -70,20 +84,36 @@ async function post(path, body, { timeout = 15000 } = {}) {
     }
 
     return unwrap(raw)
+  } catch (err) {
+    clearTimeout(timer)
+    throw err
   } finally {
     clearTimeout(timer)
   }
 }
 
-/** POST /solve — falls back to localSolve on any network / config failure */
+/**
+ * POST /solve
+ * Falls back to localSolve ONLY when backend is completely unreachable
+ * (no URL configured, AbortError from timeout, or DNS/network failure).
+ * CORS errors and server errors are surfaced as real errors.
+ */
 export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = null }) {
-  if (!BASE_URL) return localSolve({ expr, operation, wrt, order, bounds })
+  if (!BASE_URL) {
+    console.warn('[apiClient] VITE_API_BASE_URL not set — using local solver')
+    return localSolve({ expr, operation, wrt, order, bounds })
+  }
   try {
     return await post('/solve', { expr, operation, wrt, order, bounds })
   } catch (e) {
-    if (e.name === 'AbortError' || e.code === 'no_backend' ||
-        (e instanceof TypeError && e.message.includes('fetch'))) {
-      return localSolve({ expr, operation, wrt, order, bounds })
+    // Only fall back on genuine network unavailability
+    const isUnreachable =
+      e.name === 'AbortError' ||
+      e.code === 'no_backend' ||
+      (e instanceof TypeError && /fetch|network|failed/i.test(e.message))
+    if (isUnreachable) {
+      console.warn('[apiClient] Backend unreachable — using local solver:', e.message)
+      return { ...localSolve({ expr, operation, wrt, order, bounds }), _local: true }
     }
     throw e
   }

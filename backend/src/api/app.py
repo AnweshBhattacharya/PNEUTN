@@ -11,14 +11,17 @@ import solve
 import riemann
 import integral_order
 
-# ── CORS headers added to every response ──────────────────────────────────
-_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
+# ── CORS ──────────────────────────────────────────────────────────────────
+# HTTP API Gateway (v2) handles CORS at the API layer via template.yaml.
+# We still set these headers on Lambda responses as a belt-and-suspenders
+# measure (some API GW configurations pass them through unchanged).
+_ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 
 CORS_HEADERS = {
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": _ORIGIN,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "content-type, authorization",
+    "Content-Type":                "application/json",
+    "Access-Control-Allow-Origin": _ALLOWED_ORIGIN,
+    "Access-Control-Allow-Methods":"POST, OPTIONS",
+    "Access-Control-Allow-Headers":"content-type",
 }
 
 
@@ -33,7 +36,7 @@ def _resp(status: int, body: dict) -> dict:
 def handler(event, context):
     """AWS Lambda entry point — HTTP API v2 payload format."""
 
-    # Handle CORS pre-flight
+    # ── CORS pre-flight ────────────────────────────────────────────────
     method = (
         event.get("requestContext", {}).get("http", {}).get("method", "")
         or event.get("httpMethod", "")
@@ -41,13 +44,14 @@ def handler(event, context):
     if method == "OPTIONS":
         return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
 
-    # Extract route
+    # ── Extract route ─────────────────────────────────────────────────
     try:
         route = event["requestContext"]["http"]["path"]
     except (KeyError, TypeError):
-        return _resp(400, {"error": "malformed_request", "message": "Missing request context."})
+        return _resp(400, {"error": "malformed_request",
+                           "message": "Missing request context."})
 
-    # Parse body
+    # ── Parse body ────────────────────────────────────────────────────
     raw_body = event.get("body") or "{}"
     if event.get("isBase64Encoded"):
         import base64
@@ -56,9 +60,10 @@ def handler(event, context):
     try:
         body = json.loads(raw_body)
     except json.JSONDecodeError:
-        return _resp(400, {"error": "malformed_request", "message": "Request body is not valid JSON."})
+        return _resp(400, {"error": "malformed_request",
+                           "message": "Request body is not valid JSON."})
 
-    # Route dispatch — each handler returns a dict with statusCode + body string
+    # ── Route dispatch ────────────────────────────────────────────────
     if route == "/solve":
         inner = solve.handle(body)
     elif route == "/riemann":
@@ -66,8 +71,10 @@ def handler(event, context):
     elif route == "/integral-order":
         inner = integral_order.handle(body)
     else:
-        return _resp(404, {"error": "not_found", "message": f"Unknown route: {route}"})
+        return _resp(404, {"error": "not_found",
+                           "message": f"Unknown route: {route}"})
 
-    # Merge CORS headers into the handler's response
-    inner["headers"] = {**CORS_HEADERS, **inner.get("headers", {})}
+    # Ensure CORS headers are present on every response
+    inner.setdefault("headers", {})
+    inner["headers"] = {**CORS_HEADERS, **inner["headers"]}
     return inner
