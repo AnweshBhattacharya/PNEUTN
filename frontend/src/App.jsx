@@ -141,7 +141,7 @@ export default function App() {
     <div className={styles.app}>
       {/* ── Top bar ── */}
       <header className={styles.topBar}>
-        <span className={styles.brand}>Pneutn</span>
+        <span className={styles.brand}>PNEUTN</span>
         <nav className={styles.topBarCenter} aria-label="Examples">
           {EXAMPLE_EXPRS.map((ex, i) => (
             <button key={i} className={styles.exampleChip} onClick={() => loadExample(ex)} id={`example-${i}`}>
@@ -282,11 +282,6 @@ export default function App() {
           )}
         </section>
       </main>
-
-      <footer className={styles.footer}>
-        <span>Pneutn — anonymous · stateless · serverless</span>
-        <span>React + Three.js + SymPy + Gemini</span>
-      </footer>
     </div>
   )
 }
