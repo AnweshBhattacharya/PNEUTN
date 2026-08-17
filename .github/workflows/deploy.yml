@@ -28,21 +28,37 @@ jobs:
         with:
           fetch-depth: 2   # need parent commit to diff against
 
-      # Detect whether any backend file actually changed.
-      # On workflow_dispatch there is no commit diff, so we default to "changed".
-      - name: Check for backend changes
+      # On workflow_dispatch there is no commit to diff, so always deploy.
+      - name: Force changed=true (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        id: changes-dispatch
+        shell: bash
+        run: echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # On push, diff against parent commit to see if backend files changed.
+      - name: Check for backend changes (push)
+        if: github.event_name == 'push'
+        id: changes-push
+        shell: bash
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(backend/|\.github/workflows/deploy\.yml)' | wc -l)
+          if [ "$CHANGED" -gt 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Merge outputs from the two steps above into one value downstream steps can use.
+      - name: Set combined changed flag
         id: changes
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          DISPATCH="${{ steps.changes-dispatch.outputs.changed }}"
+          PUSH="${{ steps.changes-push.outputs.changed }}"
+          if [ "$DISPATCH" = "true" ] || [ "$PUSH" = "true" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD | grep -E '^(backend/|\.github/workflows/deploy\.yml)' | wc -l)
-            if [ "$CHANGED" -gt 0 ]; then
-              echo "changed=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "changed=false" >> "$GITHUB_OUTPUT"
-            fi
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Validate required deployment secrets
