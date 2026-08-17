@@ -16,11 +16,12 @@
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border-color);
   color: var(--content-tertiary);
-  background: var(--surface-raised);
+  background: var(--surface-sunken);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
+  flex-shrink: 0;
 }
 
 .headerRight {
@@ -100,10 +101,11 @@
 /* ── Result box ── */
 .resultBox {
   margin: var(--sp-3) var(--sp-4) 0;
-  padding: var(--sp-3);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-deep, var(--surface-sunken));
+  border: 1px solid var(--border-medium, var(--border-color));
+  border-left: 3px solid var(--content-primary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -118,12 +120,13 @@
 }
 .resultLatex {
   overflow-x: auto;
+  padding: var(--sp-1) 0;
 }
 
 /* ── Step list ── */
 .stepList {
   list-style: none;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3) var(--sp-3);
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -135,10 +138,11 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   animation: fadeUp var(--duration-slow) var(--ease-out) both;
-  transition: border-color var(--duration-fast);
+  transition: border-color var(--duration-fast), background var(--duration-fast);
 }
 .step:hover {
-  border-color: var(--content-tertiary);
+  border-color: var(--border-medium, var(--content-tertiary));
+  background: var(--surface-muted, var(--surface-raised));
 }
 
 /* Collapsible step header */
@@ -229,9 +233,9 @@
   flex-direction: column;
   gap: 6px;
   padding: var(--sp-2) var(--sp-3);
-  background: var(--surface-sunken);
+  background: var(--surface-active, var(--surface-sunken));
   border-radius: var(--radius-sm);
-  border-left: 2px solid var(--border-color);
+  border-left: 2px solid var(--border-medium, var(--border-color));
 }
 
 .transformRow {

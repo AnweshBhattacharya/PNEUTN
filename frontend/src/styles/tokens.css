@@ -1,5 +1,5 @@
 /* ==========================================================================
-   tokens.css — Pneuton Design Tokens
+   tokens.css — Pneutn Design Tokens
    Minimalist, muted palette with full dark / light mode support.
    Toggle by setting data-theme="dark" on <html>; falls back to OS preference.
    ========================================================================== */
@@ -8,16 +8,35 @@
 :root {
   color-scheme: light;
 
-  /* Core surface */
+  /* Core surface — extended grey scale (light) */
   --surface-base:      #fafaf9;   /* warm off-white */
   --surface-raised:    #ffffff;
   --surface-sunken:    #f3f2ef;   /* subtle panel bg */
   --surface-hover:     #eceae6;
+  --surface-active:    #e4e1dc;   /* pressed / selected */
+  --surface-muted:     #f7f6f3;   /* between base and raised */
+  --surface-deep:      #e8e5e0;   /* deeper inset */
   --surface-inverted:  #1a1917;   /* near-black header/footer */
   --surface-disabled:  #f0eeeb;
 
+  /* Grey scale tokens — for fine-grained control */
+  --grey-50:  #fafaf9;
+  --grey-100: #f5f4f0;
+  --grey-150: #eeece7;
+  --grey-200: #e4e1dc;
+  --grey-300: #d0cdc6;
+  --grey-400: #b0aca4;
+  --grey-500: #8c8880;
+  --grey-600: #6b6760;
+  --grey-700: #4a4740;
+  --grey-800: #2e2c28;
+  --grey-900: #1a1917;
+  --grey-950: #111110;
+
   /* Border */
   --border-color:      #d6d3cd;
+  --border-subtle:     #e4e1dc;   /* even lighter border */
+  --border-medium:     #c0bdb6;   /* slightly stronger */
   --border-focus:      #1a1917;
   --border-strong:     #1a1917;
 
@@ -25,6 +44,7 @@
   --content-primary:   #1a1917;
   --content-secondary: #57534e;
   --content-tertiary:  #a8a29e;
+  --content-quaternary:#c9c6c0;   /* even lighter label */
   --content-inverse:   #fafaf9;
   --content-disabled:  #c9c6c0;
   --content-link:      #2563eb;   /* accessible blue, not pure 0000FF */
@@ -121,14 +141,34 @@
     --surface-raised:    #1a1917;
     --surface-sunken:    #0d0d0c;
     --surface-hover:     #242320;
+    --surface-active:    #2e2c28;
+    --surface-muted:     #161614;
+    --surface-deep:      #0a0a09;
     --surface-inverted:  #f5f4f1;
     --surface-disabled:  #1e1d1b;
+
+    --grey-50:  #f5f4f1;
+    --grey-100: #e8e6e1;
+    --grey-150: #d0cdc6;
+    --grey-200: #a8a29e;
+    --grey-300: #79746e;
+    --grey-400: #57534e;
+    --grey-500: #3c3a36;
+    --grey-600: #2c2b28;
+    --grey-700: #242320;
+    --grey-800: #1a1917;
+    --grey-900: #111110;
+    --grey-950: #0d0d0c;
+
     --border-color:      #2c2b28;
+    --border-subtle:     #242320;
+    --border-medium:     #3c3a36;
     --border-focus:      #f5f4f1;
     --border-strong:     #f5f4f1;
     --content-primary:   #e8e6e1;
     --content-secondary: #a8a29e;
     --content-tertiary:  #57534e;
+    --content-quaternary:#3c3a36;
     --content-inverse:   #111110;
     --content-disabled:  #3c3a36;
     --content-link:      #60a5fa;
@@ -154,16 +194,35 @@
   --surface-raised:    #1a1917;
   --surface-sunken:    #0d0d0c;
   --surface-hover:     #242320;
+  --surface-active:    #2e2c28;
+  --surface-muted:     #161614;
+  --surface-deep:      #0a0a09;
   --surface-inverted:  #f5f4f1;
   --surface-disabled:  #1e1d1b;
 
+  --grey-50:  #f5f4f1;
+  --grey-100: #e8e6e1;
+  --grey-150: #d0cdc6;
+  --grey-200: #a8a29e;
+  --grey-300: #79746e;
+  --grey-400: #57534e;
+  --grey-500: #3c3a36;
+  --grey-600: #2c2b28;
+  --grey-700: #242320;
+  --grey-800: #1a1917;
+  --grey-900: #111110;
+  --grey-950: #0d0d0c;
+
   --border-color:      #2c2b28;
+  --border-subtle:     #242320;
+  --border-medium:     #3c3a36;
   --border-focus:      #f5f4f1;
   --border-strong:     #f5f4f1;
 
   --content-primary:   #e8e6e1;
   --content-secondary: #a8a29e;
   --content-tertiary:  #57534e;
+  --content-quaternary:#2c2b28;
   --content-inverse:   #111110;
   --content-disabled:  #3c3a36;
   --content-link:      #60a5fa;

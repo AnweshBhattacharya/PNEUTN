@@ -1,26 +1,28 @@
 /* EquationInput.module.css */
 
 .wrapper {
-  padding: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   background: var(--surface-raised);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   animation: fadeUp var(--duration-slow) var(--ease-out) both;
+  border-bottom: 1px solid var(--border-color);
 }
 
 /* ── Header ── */
 .header {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-bottom: var(--sp-3);
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-2);
   border-bottom: 1px solid var(--border-color);
 }
 
 .title {
   font-family: var(--font-headline);
-  font-size: 32px;
+  font-size: 24px;
   line-height: 1.05;
   font-weight: 400;
   color: var(--content-primary);
@@ -30,7 +32,7 @@
 .subtitle {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--content-tertiary);
   text-transform: uppercase;
 }

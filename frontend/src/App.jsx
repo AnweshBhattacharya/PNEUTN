@@ -57,7 +57,7 @@ function MoonIcon() {
 function useTheme() {
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pneuton-theme')
+      const stored = localStorage.getItem('pneutn-theme')
       if (stored) return stored
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
     }
@@ -65,7 +65,7 @@ function useTheme() {
   })
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('pneuton-theme', theme)
+    localStorage.setItem('pneutn-theme', theme)
   }, [theme])
   const toggle = useCallback(() => setTheme(t => t === 'dark' ? 'light' : 'dark'), [])
   return { theme, toggle }
@@ -141,7 +141,7 @@ export default function App() {
     <div className={styles.app}>
       {/* ── Top bar ── */}
       <header className={styles.topBar}>
-        <span className={styles.brand}>Pneuton</span>
+        <span className={styles.brand}>Pneutn</span>
         <nav className={styles.topBarCenter} aria-label="Examples">
           {EXAMPLE_EXPRS.map((ex, i) => (
             <button key={i} className={styles.exampleChip} onClick={() => loadExample(ex)} id={`example-${i}`}>
@@ -284,7 +284,7 @@ export default function App() {
       </main>
 
       <footer className={styles.footer}>
-        <span>Pneuton — anonymous · stateless · serverless</span>
+        <span>Pneutn — anonymous · stateless · serverless</span>
         <span>React + Three.js + SymPy + Gemini</span>
       </footer>
     </div>

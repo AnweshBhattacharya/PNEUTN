@@ -1,5 +1,5 @@
 """
-test_backend.py — pytest suite for the Pneuton backend.
+test_backend.py — pytest suite for the Pneutn backend.
 Run from backend/ directory:  python -m pytest tests/ -v
 """
 import json

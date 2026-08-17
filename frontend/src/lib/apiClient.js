@@ -1,5 +1,5 @@
 /**
- * apiClient.js — fetch wrapper for the Pneuton backend API.
+ * apiClient.js — fetch wrapper for the Pneutn backend API.
  *
  * Lambda HTTP API v2 wraps responses in a JSON envelope:
  *   { statusCode, headers, body: "<JSON string>" }

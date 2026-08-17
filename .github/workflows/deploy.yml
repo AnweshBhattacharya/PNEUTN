@@ -1,4 +1,4 @@
-name: Deploy Pneuton
+name: Deploy Pneutn
 
 on:
   push:
@@ -7,9 +7,14 @@ on:
 
 jobs:
   # ── Backend: SAM build + deploy ──────────────────────────────────────────
+  # Only runs when backend source or this workflow file changes.
   deploy-backend:
     name: Deploy Lambda (SAM)
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(toJson(github.event.commits.*.modified + github.event.commits.*.added + github.event.commits.*.removed), 'backend/') ||
+      contains(toJson(github.event.commits.*.modified + github.event.commits.*.added + github.event.commits.*.removed), '.github/workflows/deploy.yml')
     env:
       AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || vars.AWS_ACCESS_KEY_ID }}
@@ -46,8 +51,9 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Build the Lambda Layer (arm64 manylinux wheels) in a container
-      # This produces backend/layers/sympy-numpy/python/  which SAM packages.
+      # Install arm64 manylinux wheels directly — no Docker, no --use-container.
+      # --use-container was the root cause of the 1.5-hour job stall: it tries
+      # to pull a large Lambda build container image on every run.
       - name: Build Lambda Layer (sympy + numpy for arm64)
         run: |
           mkdir -p backend/layers/sympy-numpy/python
@@ -62,7 +68,9 @@ jobs:
 
       - name: SAM build
         working-directory: backend
-        run: sam build --use-container
+        # No --use-container: arm64 wheels already installed above with correct
+        # platform flags. Container builder would stall pulling Docker images.
+        run: sam build
 
       - name: SAM deploy
         id: sam-deploy
@@ -71,25 +79,28 @@ jobs:
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
-            --stack-name pneuton-backend \
+            --stack-name pneutn-backend \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
               GeminiApiKey="${{ env.GEMINI_API_KEY }}" \
               AmplifyDomain="${{ env.AMPLIFY_DOMAIN }}"
 
-          # Capture the API URL output for the frontend job
+          # Capture the API URL output for downstream consumers
           API_URL=$(aws cloudformation describe-stacks \
-            --stack-name pneuton-backend \
+            --stack-name pneutn-backend \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
             --output text)
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
 
-  # ── Frontend: Vite build — just verify it compiles (Amplify deploys itself)
+  # ── Frontend: Vite build + lint — runs on every push ────────────────────
+  # Amplify handles its own deployment from the Console; this job just
+  # verifies the build compiles cleanly on every commit.
   build-frontend:
     name: Build Frontend (verify)
     runs-on: ubuntu-latest
-    needs: deploy-backend
+    # Run independently — don't block on backend deploy for frontend-only pushes
+    if: always()
 
     steps:
       - uses: actions/checkout@v4
@@ -107,8 +118,10 @@ jobs:
 
       - name: Build
         working-directory: frontend
+        # VITE_API_BASE_URL may be empty here — that's fine, the build still
+        # succeeds and the real URL is injected by Amplify from its env vars.
         env:
-          VITE_API_BASE_URL: ${{ needs.deploy-backend.outputs.api_url }}
+          VITE_API_BASE_URL: ""
         run: npm run build
 
       - name: Lint

@@ -108,11 +108,19 @@
   flex: 1;
   display: grid;
   grid-template-columns: 1fr;
+  min-height: 0; /* allow grid rows to shrink to fit content */
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 900px) {
   .main {
-    grid-template-columns: 420px 1fr;
+    /* Left panel gets more room — equation + steps need space for explanations */
+    grid-template-columns: 480px 1fr;
+  }
+}
+
+@media (min-width: 1280px) {
+  .main {
+    grid-template-columns: 540px 1fr;
   }
 }
 
@@ -238,19 +246,38 @@
   flex-direction: column;
   border-right: 1px solid var(--border-color);
   animation: fadeUp var(--duration-slow) var(--ease-out) both;
+  /* On desktop: occupy full viewport height minus topbar so StepPanel can scroll */
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 900px) {
+  .leftPanel {
+    height: calc(100dvh - 52px); /* 52px = topbar */
+    position: sticky;
+    top: 52px;
+  }
 }
 
 .stepWrapper {
   flex: 1;
   border-top: 1px solid var(--border-color);
   overflow-y: auto;
+  /* Custom scrollbar — subtle */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
+.stepWrapper::-webkit-scrollbar { width: 4px; }
+.stepWrapper::-webkit-scrollbar-track { background: transparent; }
+.stepWrapper::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
 
 /* ── Right panel ────────────────────────────────────────────────────────── */
 .rightPanel {
   display: flex;
   flex-direction: column;
   animation: fadeUp var(--duration-slow) var(--ease-out) 60ms both;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Graph mode segmented control */

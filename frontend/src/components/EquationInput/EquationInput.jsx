@@ -83,7 +83,7 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
     <div className={styles.wrapper}>
       {/* ── Header ── */}
       <div className={styles.header}>
-        <h2 className={styles.title}>Pneuton</h2>
+        <h2 className={styles.title}>Pneutn</h2>
         <p className={styles.subtitle}>Calculus Visualizer</p>
       </div>
 

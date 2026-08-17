@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Pneuton backend — solve, riemann, integral-order (single Lambda, arm64)
+Description: Pneutn backend — solve, riemann, integral-order (single Lambda, arm64)
 
 Parameters:
   GeminiApiKey:
@@ -51,7 +51,7 @@ Resources:
   SymPyNumpyLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: pneuton-sympy-numpy
+      LayerName: pneutn-sympy-numpy
       ContentUri: layers/sympy-numpy/
       CompatibleRuntimes:
         - python3.11
