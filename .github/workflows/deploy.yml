@@ -3,17 +3,31 @@ name: Deploy Pneuton
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   # ── Backend: SAM build + deploy ──────────────────────────────────────────
   deploy-backend:
     name: Deploy Lambda (SAM)
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || vars.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || vars.AWS_SECRET_ACCESS_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || vars.GEMINI_API_KEY }}
+      AMPLIFY_DOMAIN: ${{ secrets.AMPLIFY_DOMAIN || vars.AMPLIFY_DOMAIN }}
     outputs:
       api_url: ${{ steps.sam-deploy.outputs.api_url }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate required deployment secrets
+        shell: bash
+        run: |
+          test -n "$AWS_REGION" || { echo "Missing AWS_REGION secret or repository variable."; exit 1; }
+          test -n "$AWS_ACCESS_KEY_ID" || { echo "Missing AWS_ACCESS_KEY_ID secret or repository variable."; exit 1; }
+          test -n "$AWS_SECRET_ACCESS_KEY" || { echo "Missing AWS_SECRET_ACCESS_KEY secret or repository variable."; exit 1; }
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -28,9 +42,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       # Build the Lambda Layer (arm64 manylinux wheels) in a container
       # This produces backend/layers/sympy-numpy/python/  which SAM packages.
@@ -61,8 +75,8 @@ jobs:
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
             --parameter-overrides \
-              GeminiApiKey="${{ secrets.GEMINI_API_KEY }}" \
-              AmplifyDomain="${{ secrets.AMPLIFY_DOMAIN }}"
+              GeminiApiKey="${{ env.GEMINI_API_KEY }}" \
+              AmplifyDomain="${{ env.AMPLIFY_DOMAIN }}"
 
           # Capture the API URL output for the frontend job
           API_URL=$(aws cloudformation describe-stacks \
@@ -80,10 +94,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node 20
+      - name: Set up Node 24
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
