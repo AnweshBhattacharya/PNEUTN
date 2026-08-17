@@ -18,7 +18,8 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      AMPLIFY_DOMAIN: ${{ secrets.AMPLIFY_DOMAIN }}
+      # AMPLIFY_DOMAIN is optional — defaults to "" which keeps CORS open to *
+      AMPLIFY_DOMAIN: ${{ secrets.AMPLIFY_DOMAIN || '' }}
     outputs:
       api_url: ${{ steps.sam-deploy.outputs.api_url }}
 
@@ -51,6 +52,7 @@ jobs:
           test -n "$AWS_REGION"            || { echo "Missing AWS_REGION secret.";            exit 1; }
           test -n "$AWS_ACCESS_KEY_ID"     || { echo "Missing AWS_ACCESS_KEY_ID secret.";     exit 1; }
           test -n "$AWS_SECRET_ACCESS_KEY" || { echo "Missing AWS_SECRET_ACCESS_KEY secret."; exit 1; }
+          # GEMINI_API_KEY and AMPLIFY_DOMAIN are optional — Lambda uses fallback narration without Gemini
 
       - name: Set up Python 3.11
         if: steps.changes.outputs.changed == 'true'
@@ -99,16 +101,21 @@ jobs:
         if: steps.changes.outputs.changed == 'true'
         id: sam-deploy
         working-directory: backend
+        shell: bash
         run: |
+          # Build parameter overrides — only include AmplifyDomain if set
+          PARAM_OVERRIDES="GeminiApiKey=${{ env.GEMINI_API_KEY }}"
+          if [ -n "${{ env.AMPLIFY_DOMAIN }}" ]; then
+            PARAM_OVERRIDES="$PARAM_OVERRIDES AmplifyDomain=${{ env.AMPLIFY_DOMAIN }}"
+          fi
+
           sam deploy \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset \
             --stack-name pneutn-backend \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides \
-              GeminiApiKey="${{ env.GEMINI_API_KEY }}" \
-              AmplifyDomain="${{ env.AMPLIFY_DOMAIN }}"
+            --parameter-overrides "$PARAM_OVERRIDES"
 
           # Capture the API URL output for downstream consumers
           API_URL=$(aws cloudformation describe-stacks \
