@@ -1,0 +1,6 @@
+/* index.css — thin global resets that aren't in tokens.css */
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}

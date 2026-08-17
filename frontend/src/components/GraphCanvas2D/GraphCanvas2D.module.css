@@ -1,0 +1,165 @@
+/* GraphCanvas2D.module.css */
+
+.wrapper {
+  background: var(--surface-base);
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border-color);
+}
+.expanded {
+  position: fixed;
+  inset: 52px 0 0 0;
+  z-index: 200;
+  background: var(--surface-base);
+  border-bottom: none;
+}
+
+/* ── toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 5px var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  min-height: 36px;
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+  flex-shrink: 0;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.legendExpr {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-secondary);
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+.coordBadge {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-secondary);
+  background: var(--surface-sunken);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  animation: fadeIn var(--duration-fast) var(--ease-out) both;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.slopeBadge {
+  color: var(--accent);
+  font-weight: 700;
+}
+.toolBtn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  padding: 0;
+  flex-shrink: 0;
+}
+.toolBtn:hover { background: var(--surface-hover); color: var(--content-primary); }
+
+/* ── canvas + tick overlay ── */
+.canvasWrap {
+  position: relative;
+  flex: 1;
+}
+.canvas {
+  width: 100%;
+  height: 260px;
+  display: block;
+  cursor: crosshair;
+}
+.expanded .canvas {
+  height: calc(100dvh - 52px - 36px - 24px);
+}
+.canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Tick label overlay — HTML on top of canvas */
+.tickLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.tickX {
+  position: absolute;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--content-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+.tickY {
+  position: absolute;
+  left: 4px;
+  transform: translateY(50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--content-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ── hint bar ── */
+.hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-tertiary);
+  text-align: center;
+  padding: 4px;
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}

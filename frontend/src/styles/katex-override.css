@@ -1,0 +1,48 @@
+/* ==========================================================================
+   katex-override.css — monospace enforcement for KaTeX.
+
+   IMPORTANT: this file MUST be imported AFTER katex/dist/katex.min.css
+   in main.jsx, or the import order will let KaTeX's own rules win.
+
+   See ARCHITECTURE.md §1 for the full explanation of why this is needed:
+   KaTeX defaults to italic serif (mathnormal) for variables, which breaks
+   the brutalist/typewriter look. We override to monospace here.
+   ========================================================================== */
+
+.katex,
+.katex .mathnormal,
+.katex .mathit,
+.katex .mathrm,
+.katex .mathbf,
+.katex .mathdefault,
+.katex .mathtt,
+.katex .math {
+  font-family: 'Space Mono', 'Consolas', 'Courier New', monospace !important;
+  font-style: normal !important; /* KaTeX italicises variables by default — kill that */
+}
+
+/* KaTeX operators, relations, and punctuation in a separate font stack — catch those too */
+.katex .mop,
+.katex .mrel,
+.katex .mbin,
+.katex .mpunct,
+.katex .mopen,
+.katex .mclose,
+.katex .minner {
+  font-family: 'Space Mono', 'Consolas', 'Courier New', monospace !important;
+}
+
+/* Fractions, accents, and delimiters */
+.katex .mfrac,
+.katex .mfrac .frac-line,
+.katex .sqrt,
+.katex .delimsizing {
+  font-family: 'Space Mono', 'Consolas', 'Courier New', monospace !important;
+}
+
+/* Size-adjusted text inside KaTeX (subscripts, superscripts) */
+.katex .msupsub,
+.katex .mord {
+  font-family: 'Space Mono', 'Consolas', 'Courier New', monospace !important;
+  font-style: normal !important;
+}

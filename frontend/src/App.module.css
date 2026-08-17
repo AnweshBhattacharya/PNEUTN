@@ -1,0 +1,346 @@
+/* App.module.css */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--surface-base);
+  color: var(--content-primary);
+  transition: background-color var(--duration-base) var(--ease-out),
+              color var(--duration-base) var(--ease-out);
+}
+
+/* ── Top Bar ────────────────────────────────────────────────────────────── */
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--sp-4);
+  height: 52px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: background-color var(--duration-base) var(--ease-out),
+              border-color var(--duration-base) var(--ease-out);
+  gap: var(--sp-3);
+}
+
+.brand {
+  font-family: var(--font-headline);
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  color: var(--content-primary);
+  flex-shrink: 0;
+}
+
+.topBarCenter {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  justify-content: center;
+}
+.topBarCenter::-webkit-scrollbar { display: none; }
+
+.exampleChip {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.exampleChip:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+  border-color: var(--content-tertiary);
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* Theme toggle button */
+.themeBtn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+  font-size: 15px;
+}
+.themeBtn:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+  border-color: var(--content-tertiary);
+}
+
+/* ── Loading banner ─────────────────────────────────────────────────────── */
+.loadingBanner {
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ── Main layout ────────────────────────────────────────────────────────── */
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .main {
+    grid-template-columns: 420px 1fr;
+  }
+}
+
+/* ── Area toggle in topbar ── */
+.areaToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.areaLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-secondary);
+  letter-spacing: 0.04em;
+}
+/* Reuse toggle styles from EquationInput */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggleTrack {
+  position: absolute; inset: 0;
+  background: var(--border-color);
+  border-radius: 9px; cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.toggle input:checked + .toggleTrack { background: var(--accent); }
+.toggleThumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; background: #fff;
+  border-radius: 50%; pointer-events: none;
+  transition: transform var(--duration-fast) var(--ease-out);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle input:checked ~ .toggleThumb { transform: translateX(14px); }
+
+/* ── Equation tabs ──────────────────────────────────────────────────────── */
+.eqTabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  min-height: 36px;
+}
+.eqTabs::-webkit-scrollbar { display: none; }
+
+.eqTab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 var(--sp-3);
+  border: none;
+  border-top: 2px solid transparent;
+  background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  border-right: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.eqTab:hover { background: var(--surface-hover); color: var(--content-secondary); }
+.eqTabActive {
+  background: var(--surface-sunken);
+  color: var(--content-primary);
+  border-top-width: 2px;
+}
+
+.eqDot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background var(--duration-fast);
+}
+
+.eqTabLabel {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eqTabClose {
+  width: 16px; height: 16px;
+  border: none; background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer; font-size: 14px; line-height: 1;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: background var(--duration-fast), color var(--duration-fast);
+  flex-shrink: 0;
+}
+.eqTabClose:hover { background: var(--surface-hover); color: var(--color-error); }
+
+.addEqBtn {
+  width: 36px;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  flex-shrink: 0;
+}
+.addEqBtn:hover { background: var(--surface-hover); color: var(--accent); }
+
+/* ── Left panel ─────────────────────────────────────────────────────────── */
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+  animation: fadeUp var(--duration-slow) var(--ease-out) both;
+}
+
+.stepWrapper {
+  flex: 1;
+  border-top: 1px solid var(--border-color);
+  overflow-y: auto;
+}
+
+/* ── Right panel ────────────────────────────────────────────────────────── */
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  animation: fadeUp var(--duration-slow) var(--ease-out) 60ms both;
+}
+
+/* Graph mode segmented control */
+.graphTabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-raised);
+}
+
+.tab {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  padding: var(--sp-2) var(--sp-3);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--content-tertiary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+.tab:last-child { border-right: none; }
+.tab:hover:not(.activeTab) {
+  background: var(--surface-hover);
+  color: var(--content-secondary);
+}
+.activeTab {
+  background: var(--surface-sunken);
+  color: var(--content-primary);
+  font-weight: 700;
+}
+
+/* ── Numeric sample ─────────────────────────────────────────────────────── */
+.numericSample {
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  animation: fadeIn var(--duration-base) var(--ease-out) both;
+}
+
+.numericHeader {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--content-tertiary);
+}
+
+.numericTable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+
+.numericRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+.numericRow:nth-child(n+5) { border-bottom: none; }
+
+.numericCell {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-secondary);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: 0.05em;
+  color: var(--content-tertiary);
+}
+@media (max-width: 768px) {
+  .footer {
+    flex-direction: column;
+    gap: var(--sp-1);
+    text-align: center;
+  }
+}

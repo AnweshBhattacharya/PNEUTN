@@ -1,0 +1,6 @@
+# For local testing reference only.
+# The Lambda Layer is built separately (see DEPLOYMENT.md §3.1).
+# These are NOT installed into the layer via this file.
+sympy
+numpy
+google-generativeai

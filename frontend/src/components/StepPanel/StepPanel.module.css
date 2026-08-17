@@ -1,0 +1,355 @@
+/* StepPanel.module.css */
+
+.wrapper {
+  background: var(--surface-base);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Header ── */
+.header {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--content-tertiary);
+  background: var(--surface-raised);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.localBadge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+  color: var(--color-warning);
+  letter-spacing: 0.04em;
+}
+
+.stepCount {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Empty state ── */
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-6) var(--sp-5);
+  text-align: center;
+  gap: var(--sp-3);
+}
+
+.emptyIcon {
+  font-size: 40px;
+  opacity: 0.15;
+  font-family: var(--font-mono);
+  user-select: none;
+}
+
+.emptyText {
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  color: var(--content-tertiary);
+  max-width: 260px;
+  line-height: 1.7;
+}
+
+/* ── Error ── */
+.errorBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-3) var(--sp-4);
+  padding: var(--sp-3);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  border-radius: var(--radius-sm);
+  animation: fadeUp var(--duration-base) var(--ease-out) both;
+}
+.errorCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  color: var(--color-error);
+}
+.errorMsg {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--color-error);
+  line-height: 1.5;
+}
+
+/* ── Result box ── */
+.resultBox {
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  animation: scaleIn var(--duration-slow) var(--ease-out) both;
+}
+.resultLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+}
+.resultLatex {
+  overflow-x: auto;
+}
+
+/* ── Step list ── */
+.stepList {
+  list-style: none;
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.step {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  animation: fadeUp var(--duration-slow) var(--ease-out) both;
+  transition: border-color var(--duration-fast);
+}
+.step:hover {
+  border-color: var(--content-tertiary);
+}
+
+/* Collapsible step header */
+.stepHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px var(--sp-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  gap: var(--sp-2);
+  transition: background var(--duration-fast);
+}
+.stepHeader:hover {
+  background: var(--surface-hover);
+}
+
+.stepMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.stepNum {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.ruleChip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-chip);
+  padding: 2px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  text-transform: capitalize;
+  color: var(--content-secondary);
+  background: var(--surface-sunken);
+}
+
+.narratedBy {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid;
+}
+.gemini {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--accent-muted);
+}
+.fallback {
+  color: var(--content-tertiary);
+  border-color: var(--border-color);
+}
+
+.stepChevron {
+  font-size: 9px;
+  color: var(--content-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+.stepChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* ── Step body ── */
+.stepBody {
+  padding: 0 var(--sp-3) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  animation: fadeUp var(--duration-fast) var(--ease-out) both;
+}
+
+/* ── Transformation ── */
+.transformation {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border-color);
+}
+
+.transformRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transformLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-button);
+  color: var(--content-tertiary);
+  text-transform: uppercase;
+}
+
+.katexWrap {
+  overflow-x: auto;
+  padding: 2px 0;
+}
+
+.arrowRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+
+.arrow {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--content-tertiary);
+  flex-shrink: 0;
+}
+
+.arrowLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-tertiary);
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+  background: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+/* ── Explanation ── */
+.explanation {
+  font-family: var(--font-body);
+  font-size: var(--text-small);
+  line-height: 1.65;
+  color: var(--content-secondary);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--accent-muted);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  margin: 0;
+}
+
+/* ── KaTeX ── */
+.katexBlock {
+  display: block;
+  overflow-x: auto;
+}
+.katexInline {
+  display: inline;
+}
+.rawLatex {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono);
+  background: var(--surface-sunken);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Substeps ── */
+.substeps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: var(--radius-sm);
+}
+.substep {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+.substepLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-tertiary);
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+.substepEq {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-tertiary);
+  flex-shrink: 0;
+}
+.substepValue {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--content-primary);
+  overflow-x: auto;
+}
+
+.subChip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}

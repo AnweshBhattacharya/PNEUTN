@@ -1,0 +1,83 @@
+/* EquationPreview.module.css */
+
+.wrapper {
+  position: relative;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.wrapper.hasContent {
+  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-color));
+}
+
+/* Label in top-left corner */
+.label {
+  position: absolute;
+  top: 6px;
+  left: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+  pointer-events: none;
+}
+
+/* Operation badge */
+.opBadge {
+  position: absolute;
+  top: 6px;
+  right: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  background: var(--accent-muted);
+  padding: 1px 6px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+/* KaTeX render area */
+.display {
+  font-size: 22px;
+  line-height: 1.4;
+  text-align: center;
+  width: 100%;
+  overflow-x: auto;
+  padding: 8px 0 0;
+  /* Fade in on every render */
+  animation: previewFade 150ms var(--ease-out) both;
+}
+
+@keyframes previewFade {
+  from { opacity: 0.4; transform: scale(0.97); }
+  to   { opacity: 1;   transform: scale(1);    }
+}
+
+.placeholder {
+  font-family: var(--font-mono);
+  font-size: var(--text-small);
+  color: var(--content-tertiary);
+  text-align: center;
+  padding-top: 4px;
+  font-style: italic;
+}
+
+/* Error state */
+.parseError {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--color-error);
+  text-align: center;
+  padding-top: 4px;
+}

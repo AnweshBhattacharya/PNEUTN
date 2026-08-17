@@ -1,0 +1,110 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Pneuton backend — solve, riemann, integral-order (single Lambda, arm64)
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: >
+      Gemini 2.5 Flash API key from Google AI Studio.
+      Leave empty to use deterministic fallback narration.
+
+  AmplifyDomain:
+    Type: String
+    Default: ""
+    Description: >
+      Your Amplify app domain, e.g. https://main.abcdef1234.amplifyapp.com
+      Set at deploy time via --parameter-overrides.
+
+Globals:
+  Function:
+    Timeout: 29
+    MemorySize: 1024
+    Runtime: python3.11
+    Architectures:
+      - arm64
+  HttpApi:
+    CorsConfiguration:
+      AllowOrigins:
+        - "http://localhost:5173"
+        - "http://127.0.0.1:5173"
+        - "http://localhost:4173"
+        - !If
+          - HasAmplifyDomain
+          - !Ref AmplifyDomain
+          - !Ref AWS::NoValue
+        - "*"
+      AllowMethods:
+        - POST
+        - OPTIONS
+      AllowHeaders:
+        - content-type
+        - authorization
+      AllowCredentials: false
+
+Conditions:
+  HasAmplifyDomain: !Not [!Equals [!Ref AmplifyDomain, ""]]
+
+Resources:
+  SymPyNumpyLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: pneuton-sympy-numpy
+      ContentUri: layers/sympy-numpy/
+      CompatibleRuntimes:
+        - python3.11
+      RetentionPolicy: Delete
+
+  MathApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/api/
+      Handler: app.handler
+      Layers:
+        - !Ref SymPyNumpyLayer
+      Environment:
+        Variables:
+          GEMINI_API_KEY: !Ref GeminiApiKey
+      Events:
+        Solve:
+          Type: HttpApi
+          Properties:
+            Path: /solve
+            Method: post
+        Riemann:
+          Type: HttpApi
+          Properties:
+            Path: /riemann
+            Method: post
+        IntegralOrder:
+          Type: HttpApi
+          Properties:
+            Path: /integral-order
+            Method: post
+        # OPTIONS pre-flight for each route
+        SolveOptions:
+          Type: HttpApi
+          Properties:
+            Path: /solve
+            Method: options
+        RiemannOptions:
+          Type: HttpApi
+          Properties:
+            Path: /riemann
+            Method: options
+        IntegralOrderOptions:
+          Type: HttpApi
+          Properties:
+            Path: /integral-order
+            Method: options
+
+Outputs:
+  ApiUrl:
+    Description: "API Gateway endpoint — use as VITE_API_BASE_URL"
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  FunctionName:
+    Description: "Lambda function name"
+    Value: !Ref MathApiFunction

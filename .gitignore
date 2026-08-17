@@ -1,0 +1,42 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+samconfig.toml
+*.pem
+*.key
+
+# AWS SAM build artifacts
+backend/.aws-sam/
+.aws-sam/
+
+# Node
+frontend/node_modules/
+node_modules/
+frontend/dist/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+*.egg/
+
+# Lambda Layer built packages — rebuilt by pip install; not committed
+backend/layers/sympy-numpy/python/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Markdown docs — kept locally, excluded from GitHub to keep the repo clean
+*.md
+!README.md
