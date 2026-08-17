@@ -1,7 +1,9 @@
 # Secrets — never commit
 .env
+.env.*
 .env.local
 .env.*.local
+.env.production
 samconfig.toml
 *.pem
 *.key
