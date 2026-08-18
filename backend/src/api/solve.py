@@ -78,6 +78,8 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
             "Return a JSON array of strings, one per step.\n\n"
             + "\n".join(lines)
         )
+        response = model.generate_content(prompt)
+        text = response.text
         import re
         match = re.search(r'\[.*\]', text, re.DOTALL)
         if match:

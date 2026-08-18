@@ -104,6 +104,13 @@ jobs:
             --only-binary=:all: \
             --upgrade \
             sympy numpy google-generativeai
+          # --- ADDED CLEANUP COMMANDS TO BYPASS 250MB LIMIT ---
+          LAYER_DIR="backend/layers/sympy-numpy/python"
+          find $LAYER_DIR -type d -name "tests" -exec rm -rf {} +
+          find $LAYER_DIR -type d -name "testing" -exec rm -rf {} +
+          find $LAYER_DIR -type d -name "__pycache__" -exec rm -rf {} +
+          find $LAYER_DIR -type d -name "*.dist-info" -exec rm -rf {} +
+          # ----------------------------------------------------
 
       - name: SAM build
         if: steps.changes.outputs.changed == 'true'

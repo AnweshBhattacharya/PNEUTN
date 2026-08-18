@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+trueAWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Pneutn backend — solve, riemann, integral-order (single Lambda, arm64)
 
@@ -29,10 +29,7 @@ Globals:
   HttpApi:
     CorsConfiguration:
       AllowOrigins:
-        - "http://localhost:5173"
-        - "http://127.0.0.1:5173"
-        - "http://localhost:4173"
-        - !Sub "${AmplifyDomain}"
+        - "*"
       AllowMethods:
         - POST
         - OPTIONS

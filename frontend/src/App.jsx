@@ -91,6 +91,7 @@ export default function App() {
   const [showTangent,    setShowTangent]    = useState(true)
   const [showDerivative, setShowDerivative] = useState(false)
   const [showGrid,       setShowGrid]       = useState(true)
+  const [showVolumeRev,  setShowVolumeRev]  = useState(false)
   const [markedX,        setMarkedX]        = useState(null)
   const [markedXInput,   setMarkedXInput]   = useState('')
   const [xRangeMin,      setXRangeMin]      = useState(null)
@@ -103,13 +104,25 @@ export default function App() {
   const [xMax3D,         setXMax3D]         = useState(4)
   const [yMin3D,         setYMin3D]         = useState(-4)
   const [yMax3D,         setYMax3D]         = useState(4)
+  const [zMin3D,         setZMin3D]         = useState(null)
+  const [zMax3D,         setZMax3D]         = useState(null)
   const [xMin3DInput,    setXMin3DInput]    = useState('-4')
   const [xMax3DInput,    setXMax3DInput]    = useState('4')
   const [yMin3DInput,    setYMin3DInput]    = useState('-4')
   const [yMax3DInput,    setYMax3DInput]    = useState('4')
+  const [zMin3DInput,    setZMin3DInput]    = useState('')
+  const [zMax3DInput,    setZMax3DInput]    = useState('')
   const [showVolume3D,   setShowVolume3D]   = useState(true)
   const [showGrid3D,     setShowGrid3D]     = useState(true)
   const [showWireframe3D,setShowWireframe3D]= useState(true)
+  const [showTangent3D,  setShowTangent3D]  = useState(true)
+  const [showDerivative3D,setShowDerivative3D]= useState(false)
+  const [markedX3D,      setMarkedX3D]      = useState(null)
+  const [markedY3D,      setMarkedY3D]      = useState(null)
+  const [markedX3DInput, setMarkedX3DInput] = useState('')
+  const [markedY3DInput, setMarkedY3DInput] = useState('')
+  const [n3D,            setN3D]            = useState(30)
+  const [samplePoint3D,  setSamplePoint3D]  = useState('midpoint')
 
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
   const activeCurveIndex = equations.findIndex(e => e.id === activeId)
@@ -373,6 +386,7 @@ export default function App() {
                     { label: 'Tangent line', value: showTangent, set: setShowTangent },
                     { label: 'Derivative f′(x)', value: showDerivative, set: setShowDerivative },
                     { label: 'Grid', value: showGrid, set: setShowGrid },
+                    { label: 'Volume of Revolution (around X-axis)', value: showVolumeRev, set: setShowVolumeRev },
                   ].map(({ label, value, set }) => (
                     <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
                       <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
@@ -495,13 +509,34 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 3D Graph Controls */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Graph Controls</span>
+                  {[
+                    { label: 'Tangent line / plane', value: showTangent3D, set: setShowTangent3D },
+                    { label: 'Derivative f′(x)', value: showDerivative3D, set: setShowDerivative3D },
+                    { label: '3D Grid', value: showGrid3D, set: setShowGrid3D },
+                    { label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
+                    { label: 'Volume under surface (∬ z dA)', value: showVolume3D, set: setShowVolume3D },
+                  ].map(({ label, value, set }) => (
+                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
+                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
+                      <span className={styles.toggle}>
+                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
+                        <span className={styles.toggleTrack} />
+                        <span className={styles.toggleThumb} />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
                 {/* 3D Limit Settings */}
                 <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>3D Limit Settings</span>
+                  <span className={styles.sidebarSectionLabel}>3D Axis Limits</span>
 
                   {/* X domain limits */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span className={styles.areaLabel}>X Limits [x_min, x_max]</span>
+                    <span className={styles.areaLabel}>X range [-6 to 6]</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
@@ -535,7 +570,7 @@ export default function App() {
 
                   {/* Y domain limits */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                    <span className={styles.areaLabel}>Y Limits [y_min, y_max]</span>
+                    <span className={styles.areaLabel}>Y range [-6 to 6]</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
@@ -566,27 +601,127 @@ export default function App() {
                       />
                     </div>
                   </div>
+
+                  {/* Z limits */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    <span className={styles.areaLabel}>Z limits [z_min, z_max] (optional)</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={zMin3DInput}
+                        onChange={e => {
+                          setZMin3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setZMin3D(isFinite(v) ? v : null)
+                        }}
+                        placeholder="−∞"
+                        aria-label="3D Z minimum clamp"
+                      />
+                      <span className={styles.areaLabel}>to</span>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={zMax3DInput}
+                        onChange={e => {
+                          setZMax3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setZMax3D(isFinite(v) ? v : null)
+                        }}
+                        placeholder="+∞"
+                        aria-label="3D Z maximum clamp"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mark point (x, y) */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    <span className={styles.areaLabel}>Mark point (x, y)</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={markedX3DInput}
+                        onChange={e => {
+                          setMarkedX3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setMarkedX3D(isFinite(v) ? v : null)
+                        }}
+                        placeholder="x"
+                        aria-label="3D Mark X"
+                      />
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={markedY3DInput}
+                        onChange={e => {
+                          setMarkedY3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setMarkedY3D(isFinite(v) ? v : null)
+                        }}
+                        placeholder="y"
+                        aria-label="3D Mark Y"
+                      />
+                      {(markedX3D != null || markedY3D != null) && (
+                        <button
+                          className={styles.curveRemoveBtn}
+                          onClick={() => {
+                            setMarkedX3D(null); setMarkedX3DInput('')
+                            setMarkedY3D(null); setMarkedY3DInput('')
+                          }}
+                          title="Clear mark"
+                        >×</button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
-                {/* 3D Visual & Volume Toggles */}
+                {/* 3D Riemann Grid Resolution (n) & Sampling */}
                 <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>Volume & Display</span>
-
-                  {[
-                    { label: 'Volume under surface (∬ z dA)', value: showVolume3D, set: setShowVolume3D },
-                    { label: '3D Floor Grid', value: showGrid3D, set: setShowGrid3D },
-                    { label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
-                  ].map(({ label, value, set }) => (
-                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
-                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
-                      <span className={styles.toggle}>
-                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
-                        <span className={styles.toggleTrack} />
-                        <span className={styles.toggleThumb} />
-                      </span>
-                    </label>
-                  ))}
+                  <span className={styles.sidebarSectionLabel}>Riemann Grid Resolution (n)</span>
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className={styles.areaLabel}>n = {n3D} sub-intervals</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="8"
+                      max="60"
+                      step="2"
+                      value={n3D}
+                      onChange={e => setN3D(parseInt(e.target.value, 10))}
+                      style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                      aria-label="3D Riemann sub-intervals n"
+                    />
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {['left', 'midpoint', 'right'].map(s => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setSamplePoint3D(s)}
+                          className={styles.numericPill}
+                          style={{
+                            flex: 1,
+                            padding: '3px 4px',
+                            textAlign: 'center',
+                            cursor: 'pointer',
+                            background: samplePoint3D === s ? 'var(--accent)' : 'var(--surface-sunken)',
+                            color: samplePoint3D === s ? '#fff' : 'var(--content-secondary)',
+                            fontWeight: samplePoint3D === s ? 700 : 400,
+                            border: '1px solid var(--border-color)',
+                          }}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+
               </aside>
             )}
 
@@ -598,6 +733,7 @@ export default function App() {
                   activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
                   overlayRectangles={riemannRects}
                   showArea={showArea}
+                  showVolumeRev={showVolumeRev}
                   regionVertices={regionVertices}
                   showTangent={showTangent}
                   showDerivative={showDerivative}
@@ -614,9 +750,17 @@ export default function App() {
                   xMax={xMax3D}
                   yMin={yMin3D}
                   yMax={yMax3D}
+                  zMinLimit={zMin3D}
+                  zMaxLimit={zMax3D}
+                  n={n3D}
+                  samplePoint={samplePoint3D}
                   showVolume={showVolume3D}
                   showGrid={showGrid3D}
                   showWireframe={showWireframe3D}
+                  showTangent={showTangent3D}
+                  showDerivative={showDerivative3D}
+                  markedX={markedX3D}
+                  markedY={markedY3D}
                 />
               )}
             </div>

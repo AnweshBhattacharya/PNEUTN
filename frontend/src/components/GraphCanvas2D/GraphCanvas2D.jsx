@@ -1,20 +1,21 @@
 /**
- * GraphCanvas2D — multi-equation 2D renderer.
+ * GraphCanvas2D — multi-equation 2D renderer with bold axes, +x/-x labels,
+ * volume of revolution, derivative overlay, tangent tracking, and parameter support.
  *
- * Features (Desmos-inspired):
- * - Multiple coloured curves (up to 6) — supported via equations[]
+ * Features:
+ * - Bold axes with explicit labels: +x, -x, +y, -y, and origin
+ * - Multiple coloured curves (up to 6)
  * - Crosshair cursor that snaps to the nearest curve
  * - Dashed tangent line with angle badge showing slope angle in degrees
- * - Axis-projection lines from hover point to X and Y axes (highlighted)
+ * - Axis-projection lines from hover point to X and Y axes
  * - Hover tooltip shows (x, y, slope, angle)
- * - Area under curve shading (single curve to x-axis, or between two curves)
- * - Smooth animated curve draw-in on first render
+ * - Area under curve shading & Volume of revolution (around X-axis)
+ * - Animated curve draw-in on first render
  * - Pan (drag) + zoom (scroll/pinch) + reset (double-click)
- * - Expand to fullscreen toggle
- * - Theme-aware colours via MutationObserver
- * - Derivative overlay curve
+ * - Expand to fullscreen toggle (with Escape key listener)
+ * - Derivative overlay curve f'(x)
  * - Grid toggle
- * - Marked point vertical line
+ * - Marked point vertical line + dot evaluated on active curve
  *
  * Architecture: in-place buffer mutation — geometry never rebuilt per frame.
  * See ARCHITECTURE.md §1.
@@ -25,7 +26,7 @@ import { sample1D } from '../../lib/mathEval'
 import styles from './GraphCanvas2D.module.css'
 
 const N_POINTS = 600
-const AREA_N   = 300   // compile-time constant — keeps index array stable
+const AREA_N   = 300
 
 // Palette for up to 6 curves
 const CURVE_COLORS_LIGHT = [0x1a1917, 0x2563eb, 0xdc2626, 0x16a34a, 0xd97706, 0x7c3aed]
@@ -33,12 +34,12 @@ const CURVE_COLORS_DARK  = [0xe8e6e1, 0x60a5fa, 0xf87171, 0x4ade80, 0xfbbf24, 0x
 
 function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark' }
 function bgColor()    { return isDark() ? 0x111110 : 0xfafaf9 }
-function axColor()    { return isDark() ? 0x78716c : 0x57534e }  // bolder axis color
+function axColor()    { return isDark() ? 0x94a3b8 : 0x334155 }  // bold crisp axis
 function gridColor()  { return isDark() ? 0x1e1d1b : 0xeeecea }
 function curveColors(){ return isDark() ? CURVE_COLORS_DARK : CURVE_COLORS_LIGHT }
 function areaColor()  { return isDark() ? 0x60a5fa : 0x2563eb }
 function crossColor() { return isDark() ? 0x57534e : 0xb8b5b0 }
-function derivColor() { return isDark() ? 0xfbbf24 : 0xd97706 }  // derivative overlay color
+function derivColor() { return isDark() ? 0xfbbf24 : 0xd97706 }
 
 function fmtTick(n) {
   if (Number.isInteger(n)) return String(n)
@@ -54,7 +55,7 @@ function computeNiceStep(range) {
   return 10 * mag
 }
 
-// ── Tick overlay ──────────────────────────────────────────────────────────
+// ── Tick & Axis Labels overlay ────────────────────────────────────────────
 function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
   if (!viewBounds) return null
   const [xL, xR, yB, yT] = viewBounds
@@ -69,22 +70,34 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
     const v = Math.round(t / xStep) * xStep
     if (Math.abs(v) < xStep * 0.01) continue
     const px = ((v - xL) / (xR - xL)) * canvasW
-    if (px < 8 || px > canvasW - 8) continue
+    if (px < 12 || px > canvasW - 12) continue
     xTicks.push({ val: v, px })
   }
   for (let t = Math.ceil(yB / yStep) * yStep; t <= yT + yStep * 0.01; t += yStep) {
     const v = Math.round(t / yStep) * yStep
     if (Math.abs(v) < yStep * 0.01) continue
     const py = canvasH - ((v - yB) / (yT - yB)) * canvasH
-    if (py < 8 || py > canvasH - 8) continue
+    if (py < 12 || py > canvasH - 12) continue
     yTicks.push({ val: v, py })
   }
 
   const hx = hoverInfo ? ((hoverInfo.wx - xL) / (xR - xL)) * canvasW : null
   const hy = hoverInfo ? canvasH - ((hoverInfo.wy - yB) / (yT - yB)) * canvasH : null
 
+  // Coordinates of origin (0, 0)
+  const x0Px = ((0 - xL) / (xR - xL)) * canvasW
+  const y0Py = canvasH - ((0 - yB) / (yT - yB)) * canvasH
+  const pyClamped = Math.max(20, Math.min(canvasH - 24, y0Py))
+  const pxClamped = Math.max(20, Math.min(canvasW - 28, x0Px))
+
   return (
     <div className={styles.tickLayer} style={{ width: canvasW, height: canvasH }}>
+      {/* ── Bold Axis Labels: +x, -x, +y, -y ── */}
+      <span className={styles.axisLabel} style={{ right: 8, top: pyClamped - 10 }}>+x</span>
+      <span className={styles.axisLabel} style={{ left: 8, top: pyClamped - 10 }}>-x</span>
+      <span className={styles.axisLabel} style={{ left: pxClamped - 10, top: 8 }}>+y</span>
+      <span className={styles.axisLabel} style={{ left: pxClamped - 10, bottom: 8 }}>-y</span>
+
       {hx != null && (
         <>
           <div className={styles.hoverLineX} style={{ left: hx }} />
@@ -113,15 +126,14 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
   )
 }
 
-// ── Area shading helpers — in-place mutation (ARCHITECTURE.md §1) ─────────
-
-function _computeAreaVerts(expr1, expr2OrNull, xL, xR) {
+// ── Area shading helpers ──────────────────────────────────────────────────
+function _computeAreaVerts(expr1, expr2OrNull, xL, xR, extraVars = {}) {
   const verts = new Float32Array((AREA_N + 1) * 6)
   const step = (xR - xL) / AREA_N
   for (let i = 0; i <= AREA_N; i++) {
     const x = xL + i * step
-    const y1 = sample1D(expr1, x, x, 1)[0]?.y ?? 0
-    const y2 = expr2OrNull ? (sample1D(expr2OrNull, x, x, 1)[0]?.y ?? 0) : 0
+    const y1 = sample1D(expr1, x, x, 1, extraVars)[0]?.y ?? 0
+    const y2 = expr2OrNull ? (sample1D(expr2OrNull, x, x, 1, extraVars)[0]?.y ?? 0) : 0
     const base = i * 6
     verts[base]     = x; verts[base + 1] = Math.max(y1, y2); verts[base + 2] = 0.01
     verts[base + 3] = x; verts[base + 4] = Math.min(y1, y2); verts[base + 5] = 0.01
@@ -129,8 +141,8 @@ function _computeAreaVerts(expr1, expr2OrNull, xL, xR) {
   return verts
 }
 
-function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
-  const verts = _computeAreaVerts(expr1, expr2OrNull, xL, xR)
+function buildAreaMesh(expr1, expr2OrNull, xL, xR, extraVars = {}, existingMesh = null) {
+  const verts = _computeAreaVerts(expr1, expr2OrNull, xL, xR, extraVars)
 
   if (existingMesh) {
     const posAttr = existingMesh.geometry.getAttribute('position')
@@ -151,20 +163,58 @@ function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
   }
   geo.setIndex(indices)
   const mat = new THREE.MeshBasicMaterial({
-    color: areaColor(), transparent: true, opacity: 0.18, side: THREE.DoubleSide,
+    color: areaColor(), transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false,
+  })
+  return new THREE.Mesh(geo, mat)
+}
+
+// ── Volume of Revolution Shading helper (around x-axis) ───────────────────
+function _computeVolRevVerts(expr, xL, xR, extraVars = {}) {
+  const verts = new Float32Array((AREA_N + 1) * 6)
+  const step = (xR - xL) / AREA_N
+  for (let i = 0; i <= AREA_N; i++) {
+    const x = xL + i * step
+    const y = Math.abs(sample1D(expr, x, x, 1, extraVars)[0]?.y ?? 0)
+    const base = i * 6
+    verts[base]     = x; verts[base + 1] = y;  verts[base + 2] = 0.015
+    verts[base + 3] = x; verts[base + 4] = -y; verts[base + 5] = 0.015
+  }
+  return verts
+}
+
+function buildVolRevMesh(expr, xL, xR, extraVars = {}, existingMesh = null) {
+  const verts = _computeVolRevVerts(expr, xL, xR, extraVars)
+  if (existingMesh) {
+    const posAttr = existingMesh.geometry.getAttribute('position')
+    posAttr.array.set(verts)
+    posAttr.needsUpdate = true
+    return existingMesh
+  }
+  const geo = new THREE.BufferGeometry()
+  const posAttr = new THREE.Float32BufferAttribute(verts, 3)
+  posAttr.setUsage(THREE.DynamicDrawUsage)
+  geo.setAttribute('position', posAttr)
+  const indices = []
+  for (let i = 0; i < AREA_N; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3
+    indices.push(a, b, c, b, d, c)
+  }
+  geo.setIndex(indices)
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xd97706, transparent: true, opacity: 0.20, side: THREE.DoubleSide, depthWrite: false,
   })
   return new THREE.Mesh(geo, mat)
 }
 
 // ── Numerical derivative helper ───────────────────────────────────────────
-function sampleDerivative(expr, xL, xR, n) {
+function sampleDerivative(expr, xL, xR, n, extraVars = {}) {
   const step = (xR - xL) / n
   const h = 1e-5
   const pts = []
   for (let i = 0; i <= n; i++) {
     const x = xL + i * step
-    const y1 = sample1D(expr, x - h, x - h, 1)[0]?.y
-    const y2 = sample1D(expr, x + h, x + h, 1)[0]?.y
+    const y1 = sample1D(expr, x - h, x - h, 1, extraVars)[0]?.y
+    const y2 = sample1D(expr, x + h, x + h, 1, extraVars)[0]?.y
     if (y1 != null && y2 != null && isFinite(y1) && isFinite(y2)) {
       pts.push({ x, y: (y2 - y1) / (2 * h) })
     }
@@ -180,9 +230,9 @@ export default function GraphCanvas2D({
   activeCurveIndex = 0,
   overlayRectangles = [],
   showArea = false,
+  showVolumeRev = false,
   areaValue = null,
   regionVertices = null,
-  // New props
   showTangent = true,
   showDerivative = false,
   showGrid = true,
@@ -196,14 +246,15 @@ export default function GraphCanvas2D({
   const cameraRef       = useRef(null)
   const rendererRef     = useRef(null)
   const curveLinesRef   = useRef([])
-  const derivLinesRef   = useRef([])   // derivative overlay lines, one per equation
+  const derivLinesRef   = useRef([])
+  const volRevMeshRef   = useRef(null)
   const tangentRef      = useRef(null)
   const slopePointRef   = useRef(null)
   const crossHRef       = useRef(null)
   const crossVRef       = useRef(null)
   const xDotRef         = useRef(null)
   const yDotRef         = useRef(null)
-  const markedXLineRef  = useRef(null) // vertical line at markedX
+  const markedXLineRef  = useRef(null)
   const markedXDotRef   = useRef(null)
   const rectMeshRef     = useRef([])
   const areaMeshRef     = useRef(null)
@@ -218,7 +269,6 @@ export default function GraphCanvas2D({
   const lastPointer  = useRef({ x: 0, y: 0 })
   const lastPinch    = useRef(null)
 
-  // Expose showTangent to event handlers via ref
   const showTangentRef   = useRef(showTangent)
   const showDerivativeRef = useRef(showDerivative)
   const showGridRef      = useRef(showGrid)
@@ -230,8 +280,9 @@ export default function GraphCanvas2D({
   const [isExpanded, setIsExpanded] = useState(false)
   const [viewBounds, setViewBounds] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ w: 600, h: 400 })
+  const [volRevVal,  setVolRevVal]  = useState(null)
 
-  // Escape key to close expanded view (Bug 5)
+  // Escape key to close expanded view
   useEffect(() => {
     if (!isExpanded) return
     const onKeyDown = (e) => {
@@ -241,7 +292,6 @@ export default function GraphCanvas2D({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isExpanded])
 
-  // Respect custom x-range if provided
   const xMin = xRangeMin ?? DEFAULT_X_MIN
   const xMax = xRangeMax ?? DEFAULT_X_MAX
 
@@ -282,10 +332,9 @@ export default function GraphCanvas2D({
       posAttr.needsUpdate = true
       line.geometry.setDrawRange(0, cnt)
     })
-    // Resample derivative overlays
     derivLinesRef.current.forEach(({ posAttr, expr, line }) => {
       if (!posAttr || !expr) return
-      const pts = sampleDerivative(expr, xL, xR, N_POINTS)
+      const pts = sampleDerivative(expr, xL, xR, N_POINTS, extraVars)
       const arr = posAttr.array
       const cnt = Math.min(pts.length, N_POINTS)
       for (let i = 0; i < cnt; i++) {
@@ -295,7 +344,17 @@ export default function GraphCanvas2D({
       posAttr.needsUpdate = true
       line.geometry.setDrawRange(0, cnt)
     })
-  }, [extraVars])
+
+    // Volume of revolution numerical calculation
+    const activeExpr = curveLinesRef.current[activeCurveIndex]?.expr || curveLinesRef.current[0]?.expr
+    if (activeExpr) {
+      const pts = sample1D(activeExpr, xL, xR, 200, extraVars)
+      const dx = (xR - xL) / (pts.length || 1)
+      let sumY2 = 0
+      pts.forEach(p => { if (isFinite(p.y)) sumY2 += p.y * p.y })
+      setVolRevVal(Math.PI * sumY2 * dx)
+    }
+  }, [extraVars, activeCurveIndex])
 
   const buildStaticGeo = useCallback(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -304,25 +363,24 @@ export default function GraphCanvas2D({
     axisRefs.current = []; gridRefs.current = []
     const [xL, xR, yB, yT] = getViewBounds()
 
-    // Axes — use a thicker/bolder material
-    const axMat  = new THREE.LineBasicMaterial({ color: axColor(), linewidth: 1, fog: false })
-    const grdMat = new THREE.LineBasicMaterial({ color: gridColor() })
+    // ── BOLD AXES: Using thin mesh rectangles + line for crisp rendering ──
+    const axMatPlane = new THREE.MeshBasicMaterial({ color: axColor(), depthWrite: false })
+    const thick = Math.max((yT - yB) * 0.003, 0.02)
 
-    // X axis
-    const xAxGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(xL, 0, 0), new THREE.Vector3(xR, 0, 0)
-    ])
-    const xAx = new THREE.Line(xAxGeo, axMat)
-    scene.add(xAx); axisRefs.current.push(xAx)
+    // Bold X Axis
+    const xAxGeo = new THREE.PlaneGeometry(xR - xL, thick)
+    const xAxMesh = new THREE.Mesh(xAxGeo, axMatPlane)
+    xAxMesh.position.set((xL + xR) / 2, 0, 0.001)
+    scene.add(xAxMesh); axisRefs.current.push(xAxMesh)
 
-    // Y axis
-    const yAxGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, yB, 0), new THREE.Vector3(0, yT, 0)
-    ])
-    const yAx = new THREE.Line(yAxGeo, axMat)
-    scene.add(yAx); axisRefs.current.push(yAx)
+    // Bold Y Axis
+    const yAxGeo = new THREE.PlaneGeometry(thick * ((xR - xL) / (yT - yB)), yT - yB)
+    const yAxMesh = new THREE.Mesh(yAxGeo, axMatPlane)
+    yAxMesh.position.set(0, (yB + yT) / 2, 0.001)
+    scene.add(yAxMesh); axisRefs.current.push(yAxMesh)
 
     if (showGridRef.current) {
+      const grdMat = new THREE.LineBasicMaterial({ color: gridColor() })
       const xStep = computeNiceStep(xR - xL)
       const yStep = computeNiceStep(yT - yB)
       for (let gx = Math.ceil(xL / xStep) * xStep; gx <= xR; gx += xStep) {
@@ -339,8 +397,6 @@ export default function GraphCanvas2D({
   // ── Scene init ──────────────────────────────────────────────────────────
   useEffect(() => {
     const mount = mountRef.current
-
-    // Use getBoundingClientRect for accurate size at mount time
     const rect = mount.getBoundingClientRect()
     const W = Math.max(rect.width  || mount.clientWidth  || 600, 1)
     const H = Math.max(rect.height || mount.clientHeight || 400, 1)
@@ -352,7 +408,6 @@ export default function GraphCanvas2D({
     scene.background = new THREE.Color(bgColor())
     sceneRef.current = scene
 
-    // Camera: correct frustum from actual pixel dimensions
     const camera = new THREE.OrthographicCamera(DEFAULT_X_MIN, DEFAULT_X_MAX, halfH, -halfH, 0.1, 1000)
     camera.position.z = 10
     cameraRef.current = camera
@@ -426,11 +481,11 @@ export default function GraphCanvas2D({
     const el = renderer.domElement
 
     function getWorld(cx, cy) {
-      const rect = el.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
       const [xL, xR, yB, yT] = getViewBounds()
       return {
-        x: xL + ((cx - rect.left) / rect.width)  * (xR - xL),
-        y: yT - ((cy - rect.top)  / rect.height) * (yT - yB),
+        x: xL + ((cx - r.left) / r.width)  * (xR - xL),
+        y: yT - ((cy - r.top)  / r.height) * (yT - yB),
       }
     }
 
@@ -446,13 +501,13 @@ export default function GraphCanvas2D({
 
     el.addEventListener('mousemove', e => {
       if (isDragging.current) {
-        const rect = el.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
         const dx = e.clientX - lastPointer.current.x
         const dy = e.clientY - lastPointer.current.y
         lastPointer.current = { x: e.clientX, y: e.clientY }
         const [xL, xR, yB, yT] = getViewBounds()
-        viewRef.current.panX -= (dx / rect.width)  * (xR - xL)
-        viewRef.current.panY += (dy / rect.height) * (yT - yB)
+        viewRef.current.panX -= (dx / r.width)  * (xR - xL)
+        viewRef.current.panY += (dy / r.height) * (yT - yB)
         rebuildCamera(); resampleAll(); buildStaticGeo()
         tl.visible = false; sp.visible = false
         crossHRef.current.visible = false; crossVRef.current.visible = false
@@ -469,20 +524,20 @@ export default function GraphCanvas2D({
       let bestDist  = Infinity
       curves.forEach(({ expr }) => {
         if (!expr) return
-        const [pt] = sample1D(expr, w.x, w.x, 1)
+        const [pt] = sample1D(expr, w.x, w.x, 1, extraVars)
         if (!pt) return
         const d = Math.abs(pt.y - w.y)
         if (d < bestDist) { bestDist = d; bestExpr = expr }
       })
       if (!bestExpr) { setHoverInfo(null); return }
 
-      const pts = sample1D(bestExpr, w.x - 0.001, w.x + 0.001, 3)
+      const pts = sample1D(bestExpr, w.x - 0.001, w.x + 0.001, 3, extraVars)
       const midPt = pts[1] ?? pts[0]
       if (!midPt) { setHoverInfo(null); return }
 
       const dx2 = 0.0001
-      const p1s = sample1D(bestExpr, w.x - dx2, w.x - dx2, 1)
-      const p2s = sample1D(bestExpr, w.x + dx2, w.x + dx2, 1)
+      const p1s = sample1D(bestExpr, w.x - dx2, w.x - dx2, 1, extraVars)
+      const p2s = sample1D(bestExpr, w.x + dx2, w.x + dx2, 1, extraVars)
       const slope = (p1s[0] && p2s[0]) ? (p2s[0].y - p1s[0].y) / (2 * dx2) : 0
       const angleDeg = (Math.atan(slope) * 180 / Math.PI)
 
@@ -556,13 +611,13 @@ export default function GraphCanvas2D({
     }, { passive: true })
     el.addEventListener('touchmove', e => {
       if (e.touches.length === 1 && isDragging.current) {
-        const rect = el.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
         const dx = e.touches[0].clientX - lastPointer.current.x
         const dy = e.touches[0].clientY - lastPointer.current.y
         lastPointer.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
         const [xL, xR, yB, yT] = getViewBounds()
-        viewRef.current.panX -= (dx / rect.width)  * (xR - xL)
-        viewRef.current.panY += (dy / rect.height) * (yT - yB)
+        viewRef.current.panX -= (dx / r.width)  * (xR - xL)
+        viewRef.current.panY += (dy / r.height) * (yT - yB)
         rebuildCamera(); resampleAll(); buildStaticGeo()
       } else if (e.touches.length === 2 && lastPinch.current !== null) {
         const d = Math.hypot(
@@ -693,6 +748,7 @@ export default function GraphCanvas2D({
 
     resampleAll()
 
+    // ── Area Shading Mesh ──
     if (!showArea || equations.length < 1) {
       if (areaMeshRef.current) {
         scene.remove(areaMeshRef.current)
@@ -704,16 +760,36 @@ export default function GraphCanvas2D({
       const [xL, xR] = getViewBounds()
       const expr2 = equations.length >= 2 ? equations[1].expr : null
       if (areaMeshRef.current) {
-        buildAreaMesh(equations[0].expr, expr2, xL, xR, areaMeshRef.current)
+        buildAreaMesh(equations[0].expr, expr2, xL, xR, extraVars, areaMeshRef.current)
       } else {
-        const am = buildAreaMesh(equations[0].expr, expr2, xL, xR)
+        const am = buildAreaMesh(equations[0].expr, expr2, xL, xR, extraVars)
         scene.add(am)
         areaMeshRef.current = am
       }
     }
-  }, [equations, showArea, resampleAll, getViewBounds, showDerivative])
 
-  // ── Show/hide derivative overlays when toggle changes ───────────────────
+    // ── Volume of Revolution Mesh ──
+    if (!showVolumeRev || equations.length < 1) {
+      if (volRevMeshRef.current) {
+        scene.remove(volRevMeshRef.current)
+        volRevMeshRef.current.geometry.dispose()
+        volRevMeshRef.current.material.dispose()
+        volRevMeshRef.current = null
+      }
+    } else {
+      const [xL, xR] = getViewBounds()
+      const targetExpr = equations[activeCurveIndex]?.expr || equations[0].expr
+      if (volRevMeshRef.current) {
+        buildVolRevMesh(targetExpr, xL, xR, extraVars, volRevMeshRef.current)
+      } else {
+        const vm = buildVolRevMesh(targetExpr, xL, xR, extraVars)
+        scene.add(vm)
+        volRevMeshRef.current = vm
+      }
+    }
+  }, [equations, showArea, showVolumeRev, resampleAll, getViewBounds, showDerivative, activeCurveIndex, extraVars])
+
+  // ── Show/hide derivative overlays ─────────────────────────────────────────
   useEffect(() => {
     derivLinesRef.current.forEach(({ line }) => {
       if (line) line.visible = showDerivative
@@ -731,12 +807,10 @@ export default function GraphCanvas2D({
       mxLine.visible = false; mxDot.visible = false; return
     }
 
-    // Position vertical line at markedX
     const pos = mxLine.geometry.getAttribute('position')
     pos.setXYZ(0, markedX, -50, 0.01); pos.setXYZ(1, markedX, 50, 0.01)
     pos.needsUpdate = true; mxLine.computeLineDistances(); mxLine.visible = true
 
-    // Place dot on the active curve at markedX
     const targetExpr = curveLinesRef.current[activeCurveIndex]?.expr || curveLinesRef.current[0]?.expr
     if (targetExpr) {
       const [pt] = sample1D(targetExpr, markedX, markedX, 1, extraVars)
@@ -746,7 +820,7 @@ export default function GraphCanvas2D({
     }
   }, [markedX, activeCurveIndex, extraVars])
 
-  // ── Riemann rectangles — in-place pool (ARCHITECTURE.md §1, F2) ─────────
+  // ── Riemann rectangles ───────────────────────────────────────────────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
     const rects = overlayRectangles
@@ -757,7 +831,7 @@ export default function GraphCanvas2D({
       const posArr = geo.getAttribute('position')
       posArr.setUsage(THREE.DynamicDrawUsage)
       const fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: areaColor(), transparent: true, opacity: 0.15, side: THREE.DoubleSide,
+        color: areaColor(), transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false,
       }))
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
@@ -781,7 +855,7 @@ export default function GraphCanvas2D({
     }
   }, [overlayRectangles])
 
-  // ── Region polygon from /integral-order (AC2) ───────────────────────────
+  // ── Region polygon from /integral-order ──────────────────────────────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
     if (regionMeshRef.current) {
@@ -795,7 +869,7 @@ export default function GraphCanvas2D({
     const shape = new THREE.Shape(pts)
     const geo   = new THREE.ShapeGeometry(shape)
     const mat   = new THREE.MeshBasicMaterial({
-      color: areaColor(), transparent: true, opacity: 0.22, side: THREE.DoubleSide,
+      color: areaColor(), transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false,
     })
     const mesh  = new THREE.Mesh(geo, mat)
     mesh.position.z = 0.02
@@ -811,7 +885,7 @@ export default function GraphCanvas2D({
   return (
     <div className={`${styles.wrapper} ${isExpanded ? styles.expanded : ''}`}>
       <div className={styles.toolbar}>
-        <span className={styles.label}>Graph</span>
+        <span className={styles.label}>2D Graph</span>
         <div className={styles.legend}>
           {equations.map((eq, i) => {
             const cc = isDark() ? CURVE_COLORS_DARK : CURVE_COLORS_LIGHT
@@ -834,6 +908,11 @@ export default function GraphCanvas2D({
           {showArea && (
             <span className={styles.areaBadge} title="Area shading enabled">
               {areaValue != null ? `∫ Area = ${areaValue.toFixed(3)}` : '∫ Area'}
+            </span>
+          )}
+          {showVolumeRev && volRevVal != null && (
+            <span className={styles.volumeRevBadge} title="Volume of solid of revolution (around X-axis: π∫y² dx)">
+              V_rev ≈ {volRevVal.toFixed(2)}
             </span>
           )}
           {hoverInfo && (

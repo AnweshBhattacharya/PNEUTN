@@ -95,9 +95,38 @@
   gap: 4px;
   animation: fadeIn var(--duration-fast) var(--ease-out) both;
 }
+.volumeRevBadge {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: #d97706;
+  background: color-mix(in srgb, #d97706 14%, transparent);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 2px solid #d97706;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: fadeIn var(--duration-fast) var(--ease-out) both;
+}
 .angleBadge {
   color: var(--content-success);
   font-weight: 700;
+}
+.axisLabel {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--content-primary);
+  background: var(--surface-raised);
+  padding: 1px 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  user-select: none;
+  pointer-events: none;
+  z-index: 2;
+  letter-spacing: 0.05em;
 }
 .toolBtn {
   width: 24px; height: 24px;
@@ -162,7 +191,7 @@
   bottom: 4px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--content-primary);
   white-space: nowrap;
@@ -171,9 +200,9 @@
 .tickY {
   position: absolute;
   left: 4px;
-  transform: translateY(50%);
+  transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--content-primary);
   white-space: nowrap;
