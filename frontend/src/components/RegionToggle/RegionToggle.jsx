@@ -58,6 +58,7 @@ export default function RegionToggle({ onRegionData }) {
         role="button"
         aria-expanded={open}
         tabIndex={0}
+        aria-controls="region-toggle-body"
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
       >
         <span className={styles.headerTitle}>Region &amp; Integration Order</span>
@@ -65,7 +66,7 @@ export default function RegionToggle({ onRegionData }) {
       </div>
 
       {open && (
-        <div className={styles.body}>
+        <div id="region-toggle-body" className={styles.body}>
           <p className={styles.hint}>
             Two curves as functions of x — region needs exactly two intersection points.
           </p>

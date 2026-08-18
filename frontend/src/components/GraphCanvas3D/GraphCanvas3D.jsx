@@ -65,8 +65,10 @@ export default function GraphCanvas3D({
   const wireMeshRef  = useRef(null)
   const posAttrRef   = useRef(null)
   const colAttrRef   = useRef(null)
+  const hoverMarkerRef = useRef(null)
   const animRef      = useRef(null)
   const rotRef       = useRef({ ...DEFAULT_ROT })
+  const autoRotateRef= useRef(true)
   const isDragging   = useRef(false)
   const isInteracting= useRef(false)
   const lastPtr      = useRef({ x: 0, y: 0 })
@@ -77,8 +79,12 @@ export default function GraphCanvas3D({
   const [isExpanded, setIsExpanded] = useState(false)
   const [autoRotate, setAutoRotate] = useState(true)
 
+  // Keep autoRotateRef in sync with state so animate loop always reads current value
+  useEffect(() => { autoRotateRef.current = autoRotate }, [autoRotate])
+
   useEffect(() => {
     const mount = mountRef.current
+    const el = mount // Assign mount to el for event listeners
     const W = mount.clientWidth || 600
     const H = mount.clientHeight || 380
     const c = themeColors()
@@ -104,7 +110,8 @@ export default function GraphCanvas3D({
     dir2.position.set(-8, -4, -8); scene.add(dir2)
 
     // ── Axes with labels ─────────────────────────────────────────────
-    const axMat = new THREE.LineBasicMaterial({ color: c.axis })
+    // Make axes thicker and more visible
+    const axMat = new THREE.LineBasicMaterial({ color: c.axis, linewidth: 2 })
     const grdMat = new THREE.LineBasicMaterial({ color: c.grid })
     const axLen = 5.5
     for (const [p1, p2] of [
@@ -118,20 +125,20 @@ export default function GraphCanvas3D({
       ))
     }
 
-    // Axis label sprites
+    // Axis label sprites - make text bolder and larger
     function makeLabel(text, position) {
       const canvas = document.createElement('canvas')
-      canvas.width = 64; canvas.height = 64
+      canvas.width = 128; canvas.height = 128
       const ctx = canvas.getContext('2d')
-      ctx.fillStyle = isDark() ? '#a8a29e' : '#57534e'
-      ctx.font = 'bold 36px monospace'
+      ctx.fillStyle = isDark() ? '#e3e3e3' : '#1a1a1a'
+      ctx.font = 'bold 60px monospace'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(text, 32, 32)
+      ctx.fillText(text, 64, 64)
       const tex = new THREE.CanvasTexture(canvas)
       const mat = new THREE.SpriteMaterial({ map: tex, transparent: true })
       const sprite = new THREE.Sprite(mat)
-      sprite.scale.set(0.6, 0.6, 1)
+      sprite.scale.set(0.8, 0.8, 1)
       sprite.position.set(...position)
       scene.add(sprite)
     }
@@ -172,8 +179,19 @@ export default function GraphCanvas3D({
     const wireMesh = new THREE.Mesh(geo, wireMat)
     scene.add(wireMesh); wireMeshRef.current = wireMesh
 
-    // ── Input handlers ───────────────────────────────────────────────
-    const el = renderer.domElement
+    // ── Hover point marker ───────────────────────────────────────────
+    const hoverSphereGeo = new THREE.SphereGeometry(0.12, 16, 16)
+    const hoverSphereMat = new THREE.MeshStandardMaterial({
+      color: 0x2563eb,
+      emissive: 0x2563eb,
+      emissiveIntensity: 0.6,
+      metalness: 0.8,
+      roughness: 0.2,
+    })
+    const hoverSphere = new THREE.Mesh(hoverSphereGeo, hoverSphereMat)
+    hoverSphere.visible = false
+    scene.add(hoverSphere)
+    hoverMarkerRef.current = hoverSphere
 
     function pauseAutoRotate() {
       isInteracting.current = true
@@ -212,11 +230,20 @@ export default function GraphCanvas3D({
       if (hits.length) {
         const p = hits[0].point
         setHoverCoord({ x: p.x.toFixed(2), y: p.z.toFixed(2), z: p.y.toFixed(2) })
+        // Position hover marker sphere at the hit point
+        if (hoverMarkerRef.current) {
+          hoverMarkerRef.current.position.copy(p)
+          hoverMarkerRef.current.visible = true
+        }
       } else {
         setHoverCoord(null)
+        if (hoverMarkerRef.current) hoverMarkerRef.current.visible = false
       }
     })
-    el.addEventListener('mouseleave', () => setHoverCoord(null))
+    el.addEventListener('mouseleave', () => {
+      setHoverCoord(null)
+      if (hoverMarkerRef.current) hoverMarkerRef.current.visible = false
+    })
     el.addEventListener('wheel', e => {
       rotRef.current.radius = Math.max(4, Math.min(35,
         rotRef.current.radius + e.deltaY * 0.02))
@@ -261,8 +288,8 @@ export default function GraphCanvas3D({
     // ── Animate ──────────────────────────────────────────────────────
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
-      // Auto-rotate when not interacting
-      if (!isInteracting.current && !isDragging.current) {
+      // Auto-rotate when not interacting (respects autoRotateRef so state changes take effect)
+      if (autoRotateRef.current && !isInteracting.current && !isDragging.current) {
         rotRef.current.phi += AUTO_ROT_SPEED
       }
       const { phi, theta, radius } = rotRef.current
@@ -342,8 +369,17 @@ export default function GraphCanvas3D({
       <div className={styles.toolbar}>
         <span className={styles.label}>3D Surface</span>
         <div className={styles.toolbarCenter}>
+          <button
+            className={styles.toolBtn}
+            onClick={() => setAutoRotate(r => !r)}
+            title={autoRotate ? 'Stop auto-rotation' : 'Start auto-rotation'}
+            aria-pressed={autoRotate}
+            type="button"
+          >
+            {autoRotate ? '⟳' : '⏸'}
+          </button>
           {autoRotate && !isExpanded && (
-            <span className={styles.rotateBadge}>⟳ auto-rotating</span>
+            <span className={styles.rotateBadge}>auto-rotating</span>
           )}
         </div>
         <div className={styles.toolbarRight}>
@@ -354,11 +390,17 @@ export default function GraphCanvas3D({
           )}
           <button className={styles.toolBtn}
             onClick={() => { rotRef.current = { ...DEFAULT_ROT } }}
-            title="Reset view">⌂</button>
+            title="Reset view">
+            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor" aria-hidden="true">
+              <path d="M480-320v-100q0-25 17.5-42.5T540-480h100v60H540v100h-60Zm60 240q-25 0-42.5-17.5T480-140v-100h60v100h100v60H540Zm280-240v-100H720v-60h100q25 0 42.5 17.5T880-420v100h-60ZM720-80v-60h100v-100h60v100q0 25-17.5 42.5T820-80H720Zm111-480h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z"/>
+            </svg>
+          </button>
           <button className={styles.toolBtn}
             onClick={() => setIsExpanded(e => !e)}
             title={isExpanded ? 'Collapse' : 'Expand'}>
-            {isExpanded ? '⊡' : '⊞'}
+            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor" aria-hidden="true">
+              <path d="M200-200v-240h80v160h160v80H200Zm480-320v-160H520v-80h240v240h-80Z"/>
+            </svg>
           </button>
         </div>
       </div>

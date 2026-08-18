@@ -234,10 +234,23 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  animation: fadeUp var(--duration-fast) var(--ease-out) both;
+  animation: expandDown var(--duration-slow) var(--ease-out) both;
 }
 
-/* ── Transformation ── */
+@keyframes expandDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    max-height: 1000px;
+    transform: translateY(0);
+  }
+}
+
+/* ── Transformation — enhanced animation ── */
 .transformation {
   display: flex;
   flex-direction: column;
@@ -245,7 +258,19 @@
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-sunken);
   border-radius: var(--radius-sm);
-  border-left: 2px solid var(--border-color);
+  border-left: 3px solid var(--accent);
+  animation: slideInLeft var(--duration-base) var(--ease-out) both;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 .transformRow { display: flex; flex-direction: column; gap: 2px; }
 .transformLabel {
@@ -256,8 +281,43 @@
   text-transform: uppercase;
 }
 .katexWrap { overflow-x: auto; padding: 2px 0; }
-.arrowRow { display: flex; align-items: center; gap: var(--sp-2); padding: 2px 0; }
-.arrow { font-family: var(--font-mono); font-size: 16px; color: var(--content-tertiary); }
+.arrowRow { 
+  display: flex; 
+  align-items: center; 
+  gap: var(--sp-2); 
+  padding: 2px 0;
+  animation: slideUp 600ms var(--ease-out) 200ms both;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.arrow { 
+  font-family: var(--font-mono); 
+  font-size: 16px; 
+  color: var(--accent);
+  animation: pulse-arrow 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-arrow {
+  0%, 100% { 
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
 .arrowLabel {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -268,18 +328,21 @@
   border-radius: 6px;
 }
 
-/* ── Explanation — highlighted ── */
+/* ── Explanation — prominently highlighted ── */
 .explanation {
   font-family: var(--font-body);
-  font-size: var(--text-small);
-  line-height: 1.75;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.8;
   color: var(--content-primary);
-  padding: var(--sp-2) var(--sp-3);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
+  padding: var(--sp-3);
+  border: 2px solid var(--accent);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
   margin: 0;
   animation: fadeIn var(--duration-base) var(--ease-out) both;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* ── KaTeX ── */
@@ -313,3 +376,70 @@
 }
 .substepEq { font-family: var(--font-mono); font-size: var(--text-tiny); color: var(--content-tertiary); }
 .substepValue { font-family: var(--font-mono); font-size: var(--text-small); color: var(--content-primary); }
+
+/* ── Computing badge ── */
+.computingBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ── Loading skeleton ── */
+.skeleton {
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  animation: fadeIn var(--duration-base) var(--ease-out) both;
+}
+
+.skeletonBox {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--surface-hover) 50%,
+    var(--surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+.skeletonResult {
+  height: 72px;
+  width: 100%;
+}
+
+.skeletonStep {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  animation: fadeUp var(--duration-slow) var(--ease-out) both;
+}
+
+.skeletonLine {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--surface-hover) 50%,
+    var(--surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}

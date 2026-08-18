@@ -1,10 +1,15 @@
 /**
- * App.jsx — main layout.
+ * App.jsx — Pneutn main layout (redesigned).
  *
- * Multi-equation state: users can add up to 6 equations with the "+" button.
- * Each equation has its own solve result and step panel tab.
- * GraphCanvas2D receives all equations at once and renders them together,
- * with optional area shading between the first two.
+ * Layout (desktop):
+ *   TOP ROW  — 50/50 split, fixed height ~52vh
+ *     Left  : Input builder (MathLive field + controls + equation tabs)
+ *     Right : Solution (result + step cards with KaTeX + explanations)
+ *   BOTTOM ROW — flex 1, fills remaining viewport
+ *     Sidebar : Curve list, area toggle, Riemann controls, region toggle
+ *     Graph   : Full-width 2D/3D canvas + graph tabs
+ *
+ * On mobile: tabs switch between Input / Graph / Steps views.
  */
 import React, { useState, useCallback, useEffect } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
@@ -17,8 +22,8 @@ import LoadingBar from './components/shared/LoadingBar'
 import { solve as callSolve } from './lib/apiClient'
 import styles from './App.module.css'
 
-const EQ_COLORS       = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
-const EQ_COLORS_DARK  = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
+const EQ_COLORS      = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
+const EQ_COLORS_DARK = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
 
 const EXAMPLE_EXPRS = [
   { label: 'x² sin x',   expr: 'x^2*sin(x)',   wrt: 'x', operation: 'derivative' },
@@ -29,7 +34,7 @@ const EXAMPLE_EXPRS = [
 
 let _nextId = 1
 function makeEq(expr = 'x^2') {
-  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [] }
+  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [] }
 }
 
 function SunIcon() {
@@ -78,12 +83,15 @@ export default function App() {
   const [graphMode, setGraphMode]   = useState('2d')
   const [riemannRects, setRiemannRects] = useState([])
   const [showArea, setShowArea]     = useState(false)
-  // mobile panel toggle: 'input' | 'steps'
+  const [regionVertices, setRegionVertices] = useState(null)
+  const [activeExamplePatch, setActiveExamplePatch] = useState(null)
   const [mobilePanel, setMobilePanel] = useState('input')
 
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
 
-  // ── equation list management ──────────────────────────────────────────
+  useEffect(() => { setActiveExamplePatch(null) }, [activeId])
+
+  // ── equation management ───────────────────────────────────────────
   const addEquation = () => {
     if (equations.length >= 6) return
     const eq = makeEq('')
@@ -108,11 +116,10 @@ export default function App() {
     setEquations(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
   }, [])
 
-  // ── solve ──────────────────────────────────────────────────────────────
+  // ── solve ─────────────────────────────────────────────────────────
   const handleSolve = useCallback(async (params) => {
     const id = activeId
     updateEquation(id, { loading: true, error: null, result: null, steps: [] })
-    // Switch to steps panel on mobile after solve is triggered
     setMobilePanel('steps')
     try {
       const data = await callSolve(params)
@@ -131,10 +138,17 @@ export default function App() {
   const loadExample = (example) => {
     updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
     setRiemannRects([])
+    setActiveExamplePatch({
+      operation: example.operation ?? null,
+      wrt:       example.wrt       ?? null,
+      bounds:    example.bounds    ?? null,
+    })
   }
 
   const anyLoading = equations.some(e => e.loading)
+  // graphEquations: only pass expr so GraphCanvas2D gets the raw math string
   const graphEquations = equations.map(e => ({ id: e.id, expr: e.expr }))
+  const colors = theme === 'dark' ? EQ_COLORS_DARK : EQ_COLORS
 
   return (
     <div className={styles.app}>
@@ -145,25 +159,13 @@ export default function App() {
 
         <nav className={styles.topBarCenter} aria-label="Examples">
           {EXAMPLE_EXPRS.map((ex, i) => (
-            <button key={i} className={styles.exampleChip}
-              onClick={() => loadExample(ex)}>
+            <button key={i} className={styles.exampleChip} onClick={() => loadExample(ex)}>
               {ex.label}
             </button>
           ))}
         </nav>
 
         <div className={styles.topBarRight}>
-          {equations.length >= 1 && (
-            <label className={styles.areaToggle}>
-              <span className={styles.toggle}>
-                <input type="checkbox" checked={showArea}
-                  onChange={e => setShowArea(e.target.checked)} />
-                <span className={styles.toggleTrack} />
-                <span className={styles.toggleThumb} />
-              </span>
-              <span className={styles.areaLabel}>Area</span>
-            </label>
-          )}
           <button className={styles.themeBtn} onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -177,134 +179,212 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Mobile panel switcher ── */}
+      {/* ── Mobile tabs ── */}
       <div className={styles.mobileTabs} role="tablist">
-        <button role="tab" aria-selected={mobilePanel === 'input'}
-          className={`${styles.mobileTab} ${mobilePanel === 'input' ? styles.mobileTabActive : ''}`}
-          onClick={() => setMobilePanel('input')}>
-          Input
-        </button>
-        <button role="tab" aria-selected={mobilePanel === 'graph'}
-          className={`${styles.mobileTab} ${mobilePanel === 'graph' ? styles.mobileTabActive : ''}`}
-          onClick={() => setMobilePanel('graph')}>
-          Graph
-        </button>
-        <button role="tab" aria-selected={mobilePanel === 'steps'}
-          className={`${styles.mobileTab} ${mobilePanel === 'steps' ? styles.mobileTabActive : ''}`}
-          onClick={() => setMobilePanel('steps')}>
-          Steps {activeEq.steps?.length > 0 && <span className={styles.mobileTabBadge}>{activeEq.steps.length}</span>}
-        </button>
+        {[
+          { id: 'input', label: 'Input' },
+          { id: 'steps', label: 'Steps', badge: activeEq.steps?.length },
+          { id: 'graph', label: 'Graph' },
+        ].map(({ id, label, badge }) => (
+          <button key={id} role="tab"
+            aria-selected={mobilePanel === id}
+            className={`${styles.mobileTab} ${mobilePanel === id ? styles.mobileTabActive : ''}`}
+            onClick={() => setMobilePanel(id)}>
+            {label}
+            {badge > 0 && <span className={styles.stepCountBadge}>{badge}</span>}
+          </button>
+        ))}
       </div>
 
       <main className={styles.main}>
-        {/* ── Left panel: equation tabs + input + step panel ── */}
-        <aside className={`${styles.leftPanel} ${mobilePanel !== 'input' && mobilePanel !== 'steps' ? styles.mobileHidden : ''}`}>
 
-          {/* Equation tabs */}
-          <div className={styles.eqTabs}>
-            {equations.map((eq, i) => {
-              const dark = document.documentElement.getAttribute('data-theme') === 'dark'
-              const colors = dark ? EQ_COLORS_DARK : EQ_COLORS
-              const color = colors[i % colors.length]
-              return (
-                <button key={eq.id}
-                  className={`${styles.eqTab} ${eq.id === activeId ? styles.eqTabActive : ''}`}
-                  onClick={() => setActiveId(eq.id)}
-                  style={eq.id === activeId ? { borderTopColor: color } : {}}>
-                  <span className={styles.eqDot} style={{ background: color }} />
-                  <span className={styles.eqTabLabel}>
-                    {eq.expr ? (eq.expr.length > 12 ? eq.expr.slice(0, 12) + '…' : eq.expr) : `f${i + 1}(x)`}
-                  </span>
-                  {equations.length > 1 && (
-                    <button className={styles.eqTabClose}
-                      onClick={e => { e.stopPropagation(); removeEquation(eq.id) }}
-                      aria-label="Remove equation">×</button>
-                  )}
+        {/* ══ TOP ROW: Input (left) + Solution (right) ══ */}
+        <div className={styles.topRow}>
+
+          {/* ── Input column ── */}
+          <div className={`${styles.inputCol} ${mobilePanel !== 'input' ? styles.mobileHidden : ''}`}>
+
+            {/* Equation tabs */}
+            <div className={styles.eqTabs}>
+              {equations.map((eq, i) => {
+                const color = colors[i % colors.length]
+                return (
+                  <button key={eq.id}
+                    className={`${styles.eqTab} ${eq.id === activeId ? styles.eqTabActive : ''}`}
+                    onClick={() => setActiveId(eq.id)}
+                    style={eq.id === activeId ? { borderTopColor: color } : {}}>
+                    <span className={styles.eqDot} style={{ background: color }} />
+                    <span className={styles.eqTabLabel}>
+                      {eq.expr
+                        ? (eq.expr.length > 12 ? eq.expr.slice(0, 12) + '…' : eq.expr)
+                        : `f${i + 1}(x)`}
+                    </span>
+                    {equations.length > 1 && (
+                      <button className={styles.eqTabClose}
+                        onClick={e => { e.stopPropagation(); removeEquation(eq.id) }}
+                        aria-label="Remove equation">×</button>
+                    )}
+                  </button>
+                )
+              })}
+              {equations.length < 6 && (
+                <button className={styles.addEqBtn} onClick={addEquation}
+                  aria-label="Add equation" title="Add equation">+</button>
+              )}
+            </div>
+
+            {/* Input builder */}
+            <div className={styles.inputColBody}>
+              <EquationInput
+                key={activeEq.id}
+                value={activeEq.expr}
+                onChange={(expr) => updateExpr(activeEq.id, expr)}
+                onSolve={handleSolve}
+                loading={activeEq.loading}
+                exampleOperation={activeExamplePatch?.operation}
+                exampleWrt={activeExamplePatch?.wrt}
+                exampleBounds={activeExamplePatch?.bounds}
+              />
+            </div>
+          </div>
+
+          {/* ── Solution column ── */}
+          <div className={`${styles.solutionCol} ${mobilePanel !== 'steps' ? styles.solutionColMobileHidden : ''}`}>
+            <div className={styles.solutionColBody}>
+              <StepPanel
+                result={activeEq.result}
+                steps={activeEq.steps ?? []}
+                loading={activeEq.loading}
+                error={activeEq.error}
+                isLocal={activeEq.isLocal}
+              />
+            </div>
+          </div>
+
+        </div>
+
+        {/* ══ BOTTOM ROW: Graph ══ */}
+        <div className={`${styles.bottomRow} ${mobilePanel === 'input' || mobilePanel === 'steps' ? styles.mobileHidden : ''}`}>
+
+          {/* Graph mode tabs (full-width strip) */}
+          <div className={styles.bottomRowHeader}>
+            <div className={styles.graphTabs} role="tablist">
+              {['2d', '3d'].map(mode => (
+                <button key={mode} role="tab" aria-selected={graphMode === mode}
+                  className={`${styles.tab} ${graphMode === mode ? styles.activeTab : ''}`}
+                  onClick={() => setGraphMode(mode)}>
+                  {mode === '2d' ? '2D Curve' : '3D Surface'}
                 </button>
-              )
-            })}
-            {equations.length < 6 && (
-              <button className={styles.addEqBtn} onClick={addEquation}
-                aria-label="Add equation" title="Add equation">+</button>
+              ))}
+            </div>
+            {/* Area toggle in the header strip */}
+            {graphMode === '2d' && (
+              <label className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center' }}>
+                <span className={styles.areaLabel}>Area shading</span>
+                <span className={styles.toggle}>
+                  <input type="checkbox" checked={showArea}
+                    onChange={e => setShowArea(e.target.checked)} />
+                  <span className={styles.toggleTrack} />
+                  <span className={styles.toggleThumb} />
+                </span>
+              </label>
             )}
           </div>
 
-          {/* Input section — hidden on mobile when steps tab is active */}
-          <div className={`${styles.inputSection} ${mobilePanel === 'steps' ? styles.mobileHidden : ''}`}>
-            <EquationInput
-              key={activeEq.id}
-              value={activeEq.expr}
-              onChange={(expr) => updateExpr(activeEq.id, expr)}
-              onSolve={handleSolve}
-              loading={activeEq.loading}
-            />
-          </div>
+          <div className={styles.bottomRowBody}>
 
-          {/* Step panel — full left panel on desktop, shown when steps tab active on mobile */}
-          <div className={`${styles.stepWrapper} ${mobilePanel === 'input' ? styles.mobileHidden : ''}`}>
-            <StepPanel
-              result={activeEq.result}
-              steps={activeEq.steps ?? []}
-              loading={activeEq.loading}
-              error={activeEq.error}
-              isLocal={activeEq.isLocal}
-            />
-          </div>
-        </aside>
+            {/* ── Left sidebar: curve list + controls ── */}
+            {graphMode === '2d' && (
+              <aside className={styles.graphSidebar}>
 
-        {/* ── Right panel: graph + controls ── */}
-        <section className={`${styles.rightPanel} ${mobilePanel !== 'graph' ? styles.mobileHiddenGraph : ''}`}>
-          <div className={styles.graphTabs} role="tablist">
-            {['2d', '3d'].map(mode => (
-              <button key={mode} role="tab" aria-selected={graphMode === mode}
-                className={`${styles.tab} ${graphMode === mode ? styles.activeTab : ''}`}
-                onClick={() => setGraphMode(mode)}>
-                {mode === '2d' ? '2D Curve' : '3D Surface'}
-              </button>
-            ))}
-          </div>
+                {/* Curve list */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Curves</span>
+                  {equations.map((eq, i) => {
+                    const color = colors[i % colors.length]
+                    return (
+                      <div key={eq.id}
+                        className={`${styles.curveRow} ${eq.id === activeId ? styles.curveRowActive : ''}`}
+                        onClick={() => setActiveId(eq.id)}>
+                        <span className={styles.curveSwatch} style={{ background: color }} />
+                        <input
+                          className={styles.curveExprInput}
+                          value={eq.expr}
+                          onChange={e => updateExpr(eq.id, e.target.value)}
+                          placeholder={`f${i + 1}(x) = …`}
+                          onClick={e => { e.stopPropagation(); setActiveId(eq.id) }}
+                          aria-label={`Expression for curve ${i + 1}`}
+                          spellCheck={false}
+                        />
+                        {equations.length > 1 && (
+                          <button className={styles.curveRemoveBtn}
+                            onClick={e => { e.stopPropagation(); removeEquation(eq.id) }}
+                            aria-label={`Remove curve ${i + 1}`}>×</button>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {equations.length < 6 && (
+                    <button className={styles.addCurveBtn} onClick={addEquation}>
+                      + Add curve
+                    </button>
+                  )}
+                </div>
 
-          {graphMode === '2d' && (
-            <GraphCanvas2D
-              equations={graphEquations}
-              overlayRectangles={riemannRects}
-              showArea={showArea}
-            />
-          )}
-          {graphMode === '3d' && (
-            <GraphCanvas3D
-              exprStr={activeEq.expr || 'x^2'}
-              xMin={-4} xMax={4} yMin={-4} yMax={4}
-            />
-          )}
+                {/* Riemann sum */}
+                <RiemannControls
+                  exprStr={activeEq.expr}
+                  bounds={[0, 4]}
+                  onRectangles={setRiemannRects}
+                />
 
-          {graphMode === '2d' && (
-            <RiemannControls
-              exprStr={activeEq.expr}
-              bounds={[0, 4]}
-              onRectangles={setRiemannRects}
-            />
-          )}
+                {/* Region / integration order */}
+                <RegionToggle
+                  onRegionData={(data) => setRegionVertices(data.region_vertices ?? null)}
+                />
 
-          <RegionToggle />
+                {/* Numeric sample */}
+                {activeEq.numericSample?.length > 0 && (
+                  <div className={styles.numericSampleSection}>
+                    <span className={styles.numericHeader}>Sample points</span>
+                    <div className={styles.numericStrip}>
+                      {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
+                        <span key={i} className={styles.numericPill}>
+                          ({x}, {y})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {activeEq.numericSample?.length > 0 && (
-            <div className={styles.numericSample}>
-              <span className={styles.numericHeader}>Sample points</span>
-              <div className={styles.numericStrip}>
-                {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
-                  <span key={i} className={styles.numericPill}>
-                    ({x}, {y})
-                  </span>
-                ))}
-              </div>
+              </aside>
+            )}
+
+            {/* ── Main graph canvas ── */}
+            <div className={styles.graphMain}>
+              {graphMode === '2d' && (
+                <GraphCanvas2D
+                  equations={graphEquations}
+                  overlayRectangles={riemannRects}
+                  showArea={showArea}
+                  regionVertices={regionVertices}
+                />
+              )}
+              {graphMode === '3d' && (
+                <GraphCanvas3D
+                  exprStr={activeEq.expr || 'x^2'}
+                  xMin={-4} xMax={4} yMin={-4} yMax={4}
+                />
+              )}
             </div>
-          )}
-        </section>
+
+          </div>
+        </div>
+
       </main>
 
       <footer className={styles.footer}>
-        <span>Pneutn — anonymous · stateless · serverless</span>
+        <span>PNEUTN — anonymous · stateless · serverless</span>
         <span>React + Three.js + SymPy + Gemini</span>
       </footer>
     </div>

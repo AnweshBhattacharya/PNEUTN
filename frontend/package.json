@@ -7,21 +7,24 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "katex": "^0.18.4",
+    "katex": "^0.16.11",
     "mathjs": "^15.2.0",
     "mathlive": "^0.110.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "three": "^0.185.1"
   },
   "devDependencies": {
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.4",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
     "oxlint": "^1.75.0",
-    "vite": "^8.2.0"
+    "vite": "^6.3.5",
+    "vitest": "^2.0.0"
   }
 }

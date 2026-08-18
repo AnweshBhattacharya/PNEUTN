@@ -4,8 +4,9 @@
   background: var(--surface-base);
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border-color);
-  flex: 1 0 auto;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .expanded {
   position: fixed;
@@ -81,12 +82,22 @@
   gap: 8px;
   animation: fadeIn var(--duration-fast) var(--ease-out) both;
 }
-.slopeBadge {
+.areaBadge {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
   color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--accent);
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: fadeIn var(--duration-fast) var(--ease-out) both;
 }
 .angleBadge {
-  color: var(--color-warning);
+  color: var(--content-success);
   font-weight: 700;
 }
 .toolBtn {
@@ -111,12 +122,16 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  /* Three.js reads clientWidth/clientHeight of this div — it must fill the parent */
+  overflow: hidden;
 }
 .canvas {
+  /* Fill the parent completely — ResizeObserver + renderer.setSize handles the rest */
   width: 100%;
-  height: clamp(260px, 38vw, 520px);
+  height: 100%;
   display: block;
   cursor: crosshair;
+  min-height: 200px;
 }
 .expanded .canvas {
   height: calc(100dvh - 48px - 34px - 22px);
@@ -139,8 +154,9 @@
   bottom: 4px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--content-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--content-primary);
   white-space: nowrap;
   user-select: none;
 }
@@ -149,8 +165,9 @@
   left: 4px;
   transform: translateY(50%);
   font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--content-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--content-primary);
   white-space: nowrap;
   user-select: none;
 }
@@ -183,13 +200,13 @@
   bottom: 4px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent);
   background: var(--surface-raised);
   border: 1px solid var(--accent);
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 1px 4px;
   white-space: nowrap;
   user-select: none;
   animation: fadeIn 80ms ease both;
@@ -200,17 +217,52 @@
   left: 4px;
   transform: translateY(50%);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent);
   background: var(--surface-raised);
   border: 1px solid var(--accent);
   border-radius: 3px;
-  padding: 0 3px;
+  padding: 1px 4px;
   white-space: nowrap;
   user-select: none;
   animation: fadeIn 80ms ease both;
   z-index: 2;
+}
+
+/* Hover tooltip showing slope and angle */
+.hoverTooltip {
+  position: absolute;
+  transform: translate(calc(-50% - 12px), calc(-100% - 8px));
+  background: var(--surface-raised);
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  user-select: none;
+  animation: fadeIn 80ms ease both;
+  z-index: 3;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.tooltipLabel {
+  color: var(--content-primary);
+  font-weight: 600;
+}
+
+.slopeBadge {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.angleBadge {
+  color: var(--content-success);
+  font-weight: 700;
 }
 
 /* ── hint bar ── */

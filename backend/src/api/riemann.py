@@ -57,8 +57,16 @@ def handle(body: dict) -> dict:
     if a >= b:
         return _error("malformed_request", "bounds[0] must be less than bounds[1].", 400)
 
-    # Cap at 200 per SECURITY_POLICY.md §2
-    n = max(1, min(int(n_raw), 200))
+    # Validate sub_intervals — must be convertible to an integer (req 2.21, 2.22)
+    try:
+        n_float = float(n_raw)          # allows "8.0" → 8
+        if n_float != int(n_float):
+            return _error("malformed_request",
+                          "'sub_intervals' must be an integer.", 400)
+        n = max(1, min(int(n_float), 200))
+    except (TypeError, ValueError):
+        return _error("malformed_request",
+                      "'sub_intervals' must be an integer.", 400)
 
     # --- Safe-parse expression ---
     try:

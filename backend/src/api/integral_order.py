@@ -139,8 +139,28 @@ def handle(body: dict) -> dict:
                 x_from_lower_real = [v for v in x_from_lower if v.is_real or True]
 
                 if x_from_upper_real and x_from_lower_real:
-                    x_upper_expr = x_from_upper_real[-1]  # take last (often the positive root)
-                    x_lower_expr = x_from_lower_real[0]
+                    # Evaluate candidate branches at the y-midpoint to pick the valid pair
+                    # (largest positive x-gap), not an arbitrary index guess
+                    y_mid = (y_lo + y_hi) / 2
+                    best_lo = None
+                    best_hi = None
+                    best_gap = -sympy.oo
+                    for xl_cand in x_from_lower_real:
+                        for xu_cand in x_from_upper_real:
+                            try:
+                                xl_val = float(xl_cand.subs(y, y_mid).evalf())
+                                xu_val = float(xu_cand.subs(y, y_mid).evalf())
+                                gap = xu_val - xl_val
+                                if gap > float(best_gap):
+                                    best_gap = gap
+                                    best_lo = xl_cand
+                                    best_hi = xu_cand
+                            except Exception:
+                                continue
+                    if best_lo is None or best_hi is None or float(best_gap) <= 0:
+                        raise ValueError("Could not find valid x-bounds for dx dy order.")
+                    x_lower_expr = best_lo
+                    x_upper_expr = best_hi
 
                     bounds_latex = (
                         f"\\int_{{{latex(y_lo)}}}^{{{latex(y_hi)}}}"

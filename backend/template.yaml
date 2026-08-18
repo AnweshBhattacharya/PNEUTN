@@ -32,7 +32,7 @@ Globals:
         - "http://localhost:5173"
         - "http://127.0.0.1:5173"
         - "http://localhost:4173"
-        - "https://main.d374q6vzj4flmw.amplifyapp.com"
+        - !Sub "${AmplifyDomain}"
       AllowMethods:
         - POST
         - OPTIONS
@@ -61,7 +61,7 @@ Resources:
       Environment:
         Variables:
           GEMINI_API_KEY: !Ref GeminiApiKey
-          ALLOWED_ORIGIN: "https://main.d374q6vzj4flmw.amplifyapp.com"
+          ALLOWED_ORIGIN: !Ref AmplifyDomain
       Events:
         Solve:
           Type: HttpApi

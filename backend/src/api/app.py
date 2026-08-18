@@ -15,7 +15,7 @@ import integral_order
 # HTTP API Gateway (v2) handles CORS at the API layer via template.yaml.
 # We still set these headers on Lambda responses as a belt-and-suspenders
 # measure (some API GW configurations pass them through unchanged).
-_ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
+_ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "")
 
 CORS_HEADERS = {
     "Content-Type":                "application/json",

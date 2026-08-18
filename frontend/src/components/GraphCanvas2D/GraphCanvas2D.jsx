@@ -22,6 +22,7 @@ import { sample1D } from '../../lib/mathEval'
 import styles from './GraphCanvas2D.module.css'
 
 const N_POINTS = 600
+const AREA_N   = 300   // compile-time constant — keeps index array stable
 
 // Palette for up to 6 curves
 const CURVE_COLORS_LIGHT = [0x1a1917, 0x2563eb, 0xdc2626, 0x16a34a, 0xd97706, 0x7c3aed]
@@ -75,17 +76,11 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
     yTicks.push({ val: v, py })
   }
 
-  // Hover axis highlights
-  const hx = hoverInfo
-    ? ((hoverInfo.wx - xL) / (xR - xL)) * canvasW
-    : null
-  const hy = hoverInfo
-    ? canvasH - ((hoverInfo.wy - yB) / (yT - yB)) * canvasH
-    : null
+  const hx = hoverInfo ? ((hoverInfo.wx - xL) / (xR - xL)) * canvasW : null
+  const hy = hoverInfo ? canvasH - ((hoverInfo.wy - yB) / (yT - yB)) * canvasH : null
 
   return (
     <div className={styles.tickLayer} style={{ width: canvasW, height: canvasH }}>
-      {/* Grid projection lines from hover point */}
       {hx != null && (
         <>
           <div className={styles.hoverLineX} style={{ left: hx }} />
@@ -96,42 +91,65 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
           <span className={styles.hoverTickY} style={{ top: hy }}>
             {parseFloat(hoverInfo.wy.toFixed(4))}
           </span>
+          <div className={styles.hoverTooltip} style={{ left: hx, top: hy }}>
+            <span className={styles.tooltipLabel}>m = </span>
+            <span className={styles.slopeBadge}>{hoverInfo.slope}</span>
+            <span className={styles.tooltipLabel}>θ = </span>
+            <span className={styles.angleBadge}>{hoverInfo.angle}°</span>
+          </div>
         </>
       )}
-
-      {/* Regular axis ticks */}
       {xTicks.map(({ val, px }) => (
-        <span key={val} className={styles.tickX} style={{ left: px }}>
-          {fmtTick(val)}
-        </span>
+        <span key={val} className={styles.tickX} style={{ left: px }}>{fmtTick(val)}</span>
       ))}
       {yTicks.map(({ val, py }) => (
-        <span key={val} className={styles.tickY} style={{ top: py }}>
-          {fmtTick(val)}
-        </span>
+        <span key={val} className={styles.tickY} style={{ top: py }}>{fmtTick(val)}</span>
       ))}
     </div>
   )
 }
 
-// ── Area shading ──────────────────────────────────────────────────────────
-function buildAreaMesh(expr1, expr2OrNull, xL, xR) {
-  const N = 300
-  const verts = []
-  const step = (xR - xL) / N
-  for (let i = 0; i <= N; i++) {
+// ── Area shading helpers — in-place mutation (ARCHITECTURE.md §1) ─────────
+
+function _computeAreaVerts(expr1, expr2OrNull, xL, xR) {
+  // Returns a flat Float32Array: 2 vertices per column × (AREA_N+1) columns × 3 floats
+  const verts = new Float32Array((AREA_N + 1) * 6)
+  const step = (xR - xL) / AREA_N
+  for (let i = 0; i <= AREA_N; i++) {
     const x = xL + i * step
-    const y1pts = sample1D(expr1, x, x, 1)
-    const y1 = y1pts[0]?.y ?? 0
-    const y2 = expr2OrNull
-      ? (sample1D(expr2OrNull, x, x, 1)[0]?.y ?? 0)
-      : 0
-    verts.push(x, Math.max(y1, y2), 0.01, x, Math.min(y1, y2), 0.01)
+    const y1 = sample1D(expr1, x, x, 1)[0]?.y ?? 0
+    const y2 = expr2OrNull ? (sample1D(expr2OrNull, x, x, 1)[0]?.y ?? 0) : 0
+    const base = i * 6
+    verts[base]     = x; verts[base + 1] = Math.max(y1, y2); verts[base + 2] = 0.01
+    verts[base + 3] = x; verts[base + 4] = Math.min(y1, y2); verts[base + 5] = 0.01
   }
+  return verts
+}
+
+/**
+ * Build or update the area mesh.
+ * - If existingMesh is provided: update its position buffer in-place (no allocation).
+ * - Otherwise: create a new mesh with DynamicDrawUsage and a stable index array.
+ */
+function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
+  const verts = _computeAreaVerts(expr1, expr2OrNull, xL, xR)
+
+  if (existingMesh) {
+    // In-place update — zero allocations
+    const posAttr = existingMesh.geometry.getAttribute('position')
+    posAttr.array.set(verts)
+    posAttr.needsUpdate = true
+    existingMesh.material.color.set(areaColor())
+    return existingMesh
+  }
+
+  // First creation only
   const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
+  const posAttr = new THREE.Float32BufferAttribute(verts, 3)
+  posAttr.setUsage(THREE.DynamicDrawUsage)
+  geo.setAttribute('position', posAttr)
   const indices = []
-  for (let i = 0; i < N; i++) {
+  for (let i = 0; i < AREA_N; i++) {
     const a = i * 2, b = a + 1, c = a + 2, d = a + 3
     indices.push(a, b, c, b, d, c)
   }
@@ -146,6 +164,8 @@ export default function GraphCanvas2D({
   equations = [],
   overlayRectangles = [],
   showArea = false,
+  areaValue = null,
+  regionVertices = null,
 }) {
   const mountRef        = useRef(null)
   const sceneRef        = useRef(null)
@@ -154,16 +174,17 @@ export default function GraphCanvas2D({
   const curveLinesRef   = useRef([])
   const tangentRef      = useRef(null)
   const slopePointRef   = useRef(null)
-  const crossHRef       = useRef(null)  // horizontal projection line
-  const crossVRef       = useRef(null)  // vertical projection line
-  const xDotRef         = useRef(null)  // dot on x-axis
-  const yDotRef         = useRef(null)  // dot on y-axis
-  const rectMeshRef     = useRef([])
+  const crossHRef       = useRef(null)
+  const crossVRef       = useRef(null)
+  const xDotRef         = useRef(null)
+  const yDotRef         = useRef(null)
+  const rectMeshRef     = useRef([])   // array of { fill, edges } — stable pool
   const areaMeshRef     = useRef(null)
+  const regionMeshRef   = useRef(null)
   const axisRefs        = useRef([])
   const gridRefs        = useRef([])
   const animRef         = useRef(null)
-  const animProgressRef = useRef(0)     // 0→1 draw-in animation
+  const animProgressRef = useRef(0)
 
   const viewRef      = useRef({ panX: 0, panY: 0, scale: 1 })
   const isDragging   = useRef(false)
@@ -200,7 +221,7 @@ export default function GraphCanvas2D({
 
   const resampleAll = useCallback(() => {
     const [xL, xR] = getViewBounds()
-    curveLinesRef.current.forEach(({ posAttr, expr, line }, idx) => {
+    curveLinesRef.current.forEach(({ posAttr, expr, line }) => {
       if (!posAttr || !expr) return
       const pts = sample1D(expr, xL, xR, N_POINTS)
       const arr = posAttr.array
@@ -220,14 +241,12 @@ export default function GraphCanvas2D({
     gridRefs.current.forEach(o => scene.remove(o))
     axisRefs.current = []; gridRefs.current = []
     const [xL, xR, yB, yT] = getViewBounds()
-    const axMat  = new THREE.LineBasicMaterial({ color: axColor() })
+    const axMat  = new THREE.LineBasicMaterial({ color: axColor(), linewidth: 3, fog: false })
     const grdMat = new THREE.LineBasicMaterial({ color: gridColor() })
-    // Axes
     for (const [p1, p2] of [[[xL,0,0],[xR,0,0]],[[0,yB,0],[0,yT,0]]]) {
       const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1), new THREE.Vector3(...p2)])
       const l = new THREE.Line(g, axMat); scene.add(l); axisRefs.current.push(l)
     }
-    // Grid
     const xStep = computeNiceStep(xR - xL)
     const yStep = computeNiceStep(yT - yB)
     for (let gx = Math.ceil(xL / xStep) * xStep; gx <= xR; gx += xStep) {
@@ -243,8 +262,10 @@ export default function GraphCanvas2D({
   // ── Scene init ──────────────────────────────────────────────────────────
   useEffect(() => {
     const mount = mountRef.current
-    const W = mount.clientWidth || 600
-    const H = mount.clientHeight || 380
+    // Use getBoundingClientRect for accurate size at mount time
+    const rect = mount.getBoundingClientRect()
+    const W = rect.width  || mount.clientWidth  || 600
+    const H = rect.height || mount.clientHeight || 400
     const aspect = W / H
     const halfW = (xMaxProp - xMinProp) / 2
     const halfH = halfW / aspect
@@ -265,25 +286,20 @@ export default function GraphCanvas2D({
 
     buildStaticGeo()
 
-    // ── Tangent line ─────────────────────────────────────────────────
     const tlGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-20, 0, 0), new THREE.Vector3(20, 0, 0)
     ])
-    const tlMat = new THREE.LineDashedMaterial({
-      color: 0x2563eb, dashSize: 0.18, gapSize: 0.1, linewidth: 1,
-    })
+    const tlMat = new THREE.LineDashedMaterial({ color: 0x2563eb, dashSize: 0.18, gapSize: 0.1, linewidth: 1 })
     const tl = new THREE.Line(tlGeo, tlMat)
     tl.computeLineDistances(); tl.visible = false
     scene.add(tl); tangentRef.current = tl
 
-    // ── Slope point ──────────────────────────────────────────────────
     const spGeo = new THREE.CircleGeometry(0.06, 24)
     const spMat = new THREE.MeshBasicMaterial({ color: 0x2563eb })
     const sp = new THREE.Mesh(spGeo, spMat)
     sp.visible = false; sp.renderOrder = 3
     scene.add(sp); slopePointRef.current = sp
 
-    // ── Crosshair projection lines ───────────────────────────────────
     const makeProjectionLine = () => {
       const g = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)
@@ -299,7 +315,6 @@ export default function GraphCanvas2D({
     crossHRef.current = makeProjectionLine()
     crossVRef.current = makeProjectionLine()
 
-    // Axis dots (where projection meets axis)
     const dotGeo = new THREE.CircleGeometry(0.05, 16)
     const dotMat = new THREE.MeshBasicMaterial({ color: crossColor() })
     const xDot = new THREE.Mesh(dotGeo, dotMat.clone())
@@ -309,7 +324,6 @@ export default function GraphCanvas2D({
     scene.add(xDot); scene.add(yDot)
     xDotRef.current = xDot; yDotRef.current = yDot
 
-    // ── Input ────────────────────────────────────────────────────────
     const el = renderer.domElement
 
     function getWorld(cx, cy) {
@@ -352,21 +366,28 @@ export default function GraphCanvas2D({
       const curves = curveLinesRef.current
       if (!curves.length) { setHoverInfo(null); return }
 
-      const curveExpr = curves[0]?.expr
-      if (!curveExpr) { setHoverInfo(null); return }
+      // F6: find nearest curve to mouse world-y position, not always curve 0
+      let bestExpr = null
+      let bestDist  = Infinity
+      curves.forEach(({ expr }) => {
+        if (!expr) return
+        const [pt] = sample1D(expr, w.x, w.x, 1)
+        if (!pt) return
+        const d = Math.abs(pt.y - w.y)
+        if (d < bestDist) { bestDist = d; bestExpr = expr }
+      })
+      if (!bestExpr) { setHoverInfo(null); return }
 
-      const pts = sample1D(curveExpr, w.x - 0.001, w.x + 0.001, 3)
+      const pts = sample1D(bestExpr, w.x - 0.001, w.x + 0.001, 3)
       const midPt = pts[1] ?? pts[0]
       if (!midPt) { setHoverInfo(null); return }
 
-      // Slope + angle
       const dx2 = 0.0001
-      const p1s = sample1D(curveExpr, w.x - dx2, w.x - dx2, 1)
-      const p2s = sample1D(curveExpr, w.x + dx2, w.x + dx2, 1)
+      const p1s = sample1D(bestExpr, w.x - dx2, w.x - dx2, 1)
+      const p2s = sample1D(bestExpr, w.x + dx2, w.x + dx2, 1)
       const slope = (p1s[0] && p2s[0]) ? (p2s[0].y - p1s[0].y) / (2 * dx2) : 0
       const angleDeg = (Math.atan(slope) * 180 / Math.PI)
 
-      // Tangent line
       const extend = (getViewBounds()[1] - getViewBounds()[0]) * 0.35
       const x0t = midPt.x - extend; const x1t = midPt.x + extend
       const y0t = midPt.y + slope * (x0t - midPt.x)
@@ -376,7 +397,6 @@ export default function GraphCanvas2D({
       tlPos.needsUpdate = true; tl.computeLineDistances(); tl.visible = true
       sp.position.set(midPt.x, midPt.y, 0.04); sp.visible = true
 
-      // Crosshair projection lines
       const [xL, xR, yB, yT] = getViewBounds()
       const ch = crossHRef.current
       const cv = crossVRef.current
@@ -419,7 +439,6 @@ export default function GraphCanvas2D({
       rebuildCamera(); resampleAll(); buildStaticGeo()
     })
 
-    // Touch
     el.addEventListener('touchstart', e => {
       if (e.touches.length === 1) {
         isDragging.current = true
@@ -454,11 +473,9 @@ export default function GraphCanvas2D({
     }, { passive: true })
     el.addEventListener('touchend', () => { isDragging.current = false; lastPinch.current = null })
 
-    // ── Animate loop with draw-in ─────────────────────────────────────
     animProgressRef.current = 0
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
-      // Smooth draw-in: over ~40 frames ease progress 0→1
       if (animProgressRef.current < 1) {
         animProgressRef.current = Math.min(1, animProgressRef.current + 0.03)
         const p = animProgressRef.current
@@ -471,9 +488,14 @@ export default function GraphCanvas2D({
     animate()
 
     const ro = new ResizeObserver(() => {
-      const nW = mount.clientWidth; const nH = mount.clientHeight
-      renderer.setSize(nW, nH); rebuildCamera()
-      setCanvasSize({ w: nW, h: nH })
+      const nW = mount.clientWidth  || mount.getBoundingClientRect().width  || 600
+      const nH = mount.clientHeight || mount.getBoundingClientRect().height || 400
+      if (nW > 0 && nH > 0) {
+        renderer.setSize(nW, nH)
+        rebuildCamera()
+        resampleAll()
+        setCanvasSize({ w: nW, h: nH })
+      }
     })
     ro.observe(mount)
     setViewBounds(getViewBounds()); setCanvasSize({ w: W, h: H })
@@ -534,46 +556,89 @@ export default function GraphCanvas2D({
       }
     })
 
-    // Trigger draw-in animation on new curves
     animProgressRef.current = 0
-
     resampleAll()
 
-    // Area mesh
-    if (areaMeshRef.current) { scene.remove(areaMeshRef.current); areaMeshRef.current = null }
-    if (showArea && equations.length >= 1) {
+    // F3: Area mesh — in-place update when possible (ARCHITECTURE.md §1)
+    if (!showArea || equations.length < 1) {
+      if (areaMeshRef.current) {
+        scene.remove(areaMeshRef.current)
+        areaMeshRef.current.geometry.dispose()
+        areaMeshRef.current.material.dispose()
+        areaMeshRef.current = null
+      }
+    } else {
       const [xL, xR] = getViewBounds()
-      const am = buildAreaMesh(
-        equations[0].expr,
-        equations.length >= 2 ? equations[1].expr : null,
-        xL, xR
-      )
-      scene.add(am); areaMeshRef.current = am
+      const expr2 = equations.length >= 2 ? equations[1].expr : null
+      if (areaMeshRef.current) {
+        buildAreaMesh(equations[0].expr, expr2, xL, xR, areaMeshRef.current)
+      } else {
+        const am = buildAreaMesh(equations[0].expr, expr2, xL, xR)
+        scene.add(am)
+        areaMeshRef.current = am
+      }
     }
   }, [equations, showArea, resampleAll, getViewBounds])
 
-  // ── Riemann rectangles ──────────────────────────────────────────────────
+  // ── Riemann rectangles — in-place pool (ARCHITECTURE.md §1, F2) ─────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
-    rectMeshRef.current.forEach(m => scene.remove(m)); rectMeshRef.current = []
-    if (!overlayRectangles.length) return
-    overlayRectangles.forEach(({ x0, x1, height }) => {
-      const w = x1 - x0; const h = Math.abs(height)
-      const geo = new THREE.PlaneGeometry(w, h)
-      const mat = new THREE.MeshBasicMaterial({
+    const rects = overlayRectangles
+    const pool  = rectMeshRef.current  // array of { fill, edges }
+
+    // Grow pool only when needed — one-time allocation per new slot
+    while (pool.length < rects.length) {
+      const geo  = new THREE.PlaneGeometry(1, 1)
+      const posArr = geo.getAttribute('position')
+      posArr.setUsage(THREE.DynamicDrawUsage)
+      const fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
         color: areaColor(), transparent: true, opacity: 0.15, side: THREE.DoubleSide,
-      })
-      const mesh = new THREE.Mesh(geo, mat)
-      mesh.position.set(x0 + w / 2, height / 2, 0.05)
-      scene.add(mesh)
+      }))
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
         new THREE.LineBasicMaterial({ color: areaColor(), transparent: true, opacity: 0.6 })
       )
-      edges.position.copy(mesh.position); scene.add(edges)
-      rectMeshRef.current.push(mesh, edges)
+      scene.add(fill); scene.add(edges)
+      pool.push({ fill, edges })
+    }
+
+    // Mutate position/scale in-place for all active rects
+    rects.forEach(({ x0, x1, height }, i) => {
+      const w = x1 - x0; const h = Math.abs(height)
+      const cx = x0 + w / 2; const cy = height / 2
+      const { fill, edges } = pool[i]
+      fill.scale.set(w, h, 1);   fill.position.set(cx, cy, 0.05);  fill.visible  = true
+      edges.scale.set(w, h, 1);  edges.position.set(cx, cy, 0.05); edges.visible = true
     })
+
+    // Hide excess pool entries — no removal, no allocation
+    for (let i = rects.length; i < pool.length; i++) {
+      pool[i].fill.visible  = false
+      pool[i].edges.visible = false
+    }
   }, [overlayRectangles])
+
+  // ── Region polygon from /integral-order (AC2) ───────────────────────────
+  useEffect(() => {
+    const scene = sceneRef.current; if (!scene) return
+    if (regionMeshRef.current) {
+      scene.remove(regionMeshRef.current)
+      regionMeshRef.current.geometry.dispose()
+      regionMeshRef.current.material.dispose()
+      regionMeshRef.current = null
+    }
+    if (!regionVertices || regionVertices.length < 3) return
+    const pts   = regionVertices.map(([x, y]) => new THREE.Vector2(x, y))
+    const shape = new THREE.Shape(pts)
+    const geo   = new THREE.ShapeGeometry(shape)
+    const mat   = new THREE.MeshBasicMaterial({
+      color: areaColor(), transparent: true, opacity: 0.22, side: THREE.DoubleSide,
+    })
+    const mesh  = new THREE.Mesh(geo, mat)
+    mesh.position.z = 0.02
+    scene.add(mesh)
+    regionMeshRef.current = mesh
+  }, [regionVertices])
 
   const resetView = () => {
     viewRef.current = { panX: 0, panY: 0, scale: 1 }
@@ -597,6 +662,12 @@ export default function GraphCanvas2D({
           })}
         </div>
         <div className={styles.toolbarRight}>
+          {/* F10: render areaValue in the badge when provided */}
+          {showArea && (
+            <span className={styles.areaBadge} title="Area shading enabled">
+              {areaValue != null ? `∫ Area = ${areaValue.toFixed(3)}` : '∫ Area'}
+            </span>
+          )}
           {hoverInfo && (
             <span className={styles.coordBadge}>
               <span>x={hoverInfo.x}</span>
@@ -605,10 +676,16 @@ export default function GraphCanvas2D({
               <span className={styles.angleBadge}>{hoverInfo.angle}°</span>
             </span>
           )}
-          <button className={styles.toolBtn} onClick={resetView} title="Reset view">⌂</button>
+          <button className={styles.toolBtn} onClick={resetView} title="Reset view">
+            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor" aria-hidden="true">
+              <path d="M480-320v-100q0-25 17.5-42.5T540-480h100v60H540v100h-60Zm60 240q-25 0-42.5-17.5T480-140v-100h60v100h100v60H540Zm280-240v-100H720v-60h100q25 0 42.5 17.5T880-420v100h-60ZM720-80v-60h100v-100h60v100q0 25-17.5 42.5T820-80H720Zm111-480h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z"/>
+            </svg>
+          </button>
           <button className={styles.toolBtn} onClick={() => setIsExpanded(e => !e)}
             title={isExpanded ? 'Collapse' : 'Expand'}>
-            {isExpanded ? '⊡' : '⊞'}
+            <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor" aria-hidden="true">
+              <path d="M200-200v-240h80v160h160v80H200Zm480-320v-160H520v-80h240v240h-80Z"/>
+            </svg>
           </button>
         </div>
       </div>

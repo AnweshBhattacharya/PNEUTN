@@ -5,7 +5,6 @@
  */
 import React, { useState } from 'react'
 import katex from 'katex'
-import 'katex/dist/katex.min.css'
 import styles from './StepPanel.module.css'
 
 export function KatexDisplay({ latex, block = false }) {
@@ -117,11 +116,26 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
               local mode
             </span>
           )}
-          {steps.length > 0 && (
+          {loading && <span className={styles.computingBadge}>computing…</span>}
+          {steps.length > 0 && !loading && (
             <span className={styles.stepCount}>{steps.length} steps</span>
           )}
         </div>
       </div>
+
+      {/* ── Loading skeleton ── */}
+      {loading && (
+        <div className={styles.skeleton}>
+          <div className={`${styles.skeletonBox} ${styles.skeletonResult}`} />
+          {[0, 1, 2].map(i => (
+            <div key={i} className={styles.skeletonStep} style={{ animationDelay: `${i * 120}ms` }}>
+              <div className={styles.skeletonLine} style={{ width: '40%' }} />
+              <div className={styles.skeletonLine} style={{ width: '70%' }} />
+              <div className={styles.skeletonLine} style={{ width: '55%' }} />
+            </div>
+          ))}
+        </div>
+      )}
 
       {isEmpty && (
         <div className={styles.empty}>
@@ -139,7 +153,7 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
         </div>
       )}
 
-      {result && (
+      {result && !loading && (
         <div className={styles.resultBox}>
           <span className={styles.resultLabel}>Result</span>
           <div className={styles.resultLatex}>
@@ -148,7 +162,7 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
         </div>
       )}
 
-      {steps.length > 0 && (
+      {steps.length > 0 && !loading && (
         <ol className={styles.stepList} aria-label="Solution steps">
           {steps.map((step, i) => (
             <StepItem key={i} step={step} index={i} />

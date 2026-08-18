@@ -10,10 +10,12 @@ import styles from './EquationInput.module.css'
 
 const WRT_OPTIONS = ['x', 'y', 'z', 't']
 
-export default function EquationInput({ value, onChange, onSolve, loading }) {
+export default function EquationInput({ value, onChange, onSolve, loading,
+  exampleOperation, exampleWrt, exampleBounds }) {
   const mlRef = useRef(null)
   const [latexValue, setLatexValue]     = useState('')
   const [suggestions, setSuggestions]   = useState([])
+  const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [balanceError, setBalanceError] = useState(null)
   const [operation, setOperation]       = useState('derivative')
   const [wrt, setWrt]                   = useState('x')
@@ -27,10 +29,22 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
   useEffect(() => {
     if (mlRef.current && mlRef.current.value !== value) {
       mlRef.current.value = value || ''
-      // Also update latexValue so the preview refreshes
       try { setLatexValue(mlRef.current.getValue('latex') || '') } catch {}
     }
   }, [value])
+
+  // Apply example settings when parent loads an example chip (F5)
+  useEffect(() => {
+    if (exampleOperation) setOperation(exampleOperation)
+    if (exampleWrt) setWrt(exampleWrt)
+    if (exampleBounds) {
+      setBoundsEnabled(true)
+      setBoundLo(String(exampleBounds[0]))
+      setBoundHi(String(exampleBounds[1]))
+    } else if (exampleOperation === 'derivative') {
+      setBoundsEnabled(false)
+    }
+  }, [exampleOperation, exampleWrt, exampleBounds])
 
   const handleInput = (e) => {
     const mf = e.target
@@ -55,6 +69,7 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
     mf.value = current.slice(0, current.length - token.length) + s.completion
     mf.focus()
     setSuggestions([])
+    setActiveSuggestion(-1)
     const ltx = mf.getValue('latex')
     setLatexValue(ltx)
     onChange?.(mf.value, ltx)
@@ -66,6 +81,17 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
     const err = validateExpr(expr)
     if (err) { setBalanceError(err); return }
     setBalanceError(null)
+
+    // Validate bounds before sending — prevents NaN→null serialization (AC1)
+    if (boundsEnabled) {
+      const lo = parseFloat(boundLo)
+      const hi = parseFloat(boundHi)
+      if (!isFinite(lo) || !isFinite(hi)) {
+        setBalanceError('Bounds must be numeric values (e.g. 0 and 3).')
+        return
+      }
+    }
+
     onSolve?.({
       expr,
       operation,
@@ -77,13 +103,29 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSolve()
+    // Suggestion listbox keyboard navigation (F8)
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActiveSuggestion(i => Math.min(i + 1, suggestions.length - 1))
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActiveSuggestion(i => Math.max(i - 1, 0))
+      } else if (e.key === 'Enter' && activeSuggestion >= 0) {
+        e.preventDefault()
+        applySuggestion(suggestions[activeSuggestion])
+      } else if (e.key === 'Escape') {
+        setSuggestions([])
+        setActiveSuggestion(-1)
+      }
+    }
   }
 
   return (
     <div className={styles.wrapper}>
       {/* ── Header ── */}
       <div className={styles.header}>
-        <h2 className={styles.title}>Pneutn</h2>
+        <h2 className={styles.title}>PNEUTN</h2>
         <p className={styles.subtitle}>Calculus Visualizer</p>
       </div>
 
@@ -107,21 +149,26 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
 
       {/* ── Smart suggestions ── */}
       {suggestions.length > 0 && (
-        <ul className={styles.suggestions} role="listbox" aria-label="Suggestions">
-          {suggestions.map((s, i) => (
-            <li
-              key={i}
-              className={styles.suggestion}
-              role="option"
-              tabIndex={0}
-              onClick={() => applySuggestion(s)}
-              onKeyDown={(e) => e.key === 'Enter' && applySuggestion(s)}
-            >
-              <span className={styles.suggestCompletion}>{s.completion}</span>
-              <span className={styles.suggestDesc}>{s.description}</span>
-            </li>
-          ))}
-        </ul>
+        <ul className={styles.suggestions} role="listbox" aria-label="Suggestions"
+        aria-activedescendant={activeSuggestion >= 0 ? `suggestion-${activeSuggestion}` : undefined}>
+        {suggestions.map((s, i) => (
+          <li
+            key={i}
+            id={`suggestion-${i}`}
+            className={`${styles.suggestion} ${activeSuggestion === i ? styles.suggestionActive : ''}`}
+            role="option"
+            aria-selected={activeSuggestion === i}
+            tabIndex={0}
+            onClick={() => { applySuggestion(s); setActiveSuggestion(-1) }}
+            onKeyDown={(e) => e.key === 'Enter' && applySuggestion(s)}
+            onMouseEnter={() => setActiveSuggestion(i)}
+            onMouseLeave={() => setActiveSuggestion(-1)}
+          >
+            <span className={styles.suggestCompletion}>{s.completion}</span>
+            <span className={styles.suggestDesc}>{s.description}</span>
+          </li>
+        ))}
+      </ul>
       )}
 
       {/* ── Live LaTeX preview ── */}
@@ -137,43 +184,43 @@ export default function EquationInput({ value, onChange, onSolve, loading }) {
 
       {/* ── Controls ── */}
       <div className={styles.controls}>
-
-        {/* Operation */}
-        <div className={styles.controlGroup}>
-          <span className={styles.controlLabel}>Operation</span>
-          <div className={styles.pillGroup} role="group" aria-label="Operation">
-            {[
-              { value: 'derivative', label: 'd/dx' },
-              { value: 'integral',   label: '∫ dx'  },
-            ].map(op => (
-              <button
-                key={op.value}
-                className={`${styles.pill} ${operation === op.value ? styles.pillActive : ''}`}
-                onClick={() => setOperation(op.value)}
-                type="button"
-                aria-pressed={operation === op.value}
-              >
-                {op.label}
-              </button>
-            ))}
+        {/* Operation + wrt on one row */}
+        <div className={styles.controlRow}>
+          <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Op</span>
+            <div className={styles.pillGroup} role="group" aria-label="Operation">
+              {[
+                { value: 'derivative', label: 'd/dx' },
+                { value: 'integral',   label: '∫ dx'  },
+              ].map(op => (
+                <button
+                  key={op.value}
+                  className={`${styles.pill} ${operation === op.value ? styles.pillActive : ''}`}
+                  onClick={() => setOperation(op.value)}
+                  type="button"
+                  aria-pressed={operation === op.value}
+                >
+                  {op.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* With respect to */}
-        <div className={styles.controlGroup}>
-          <span className={styles.controlLabel}>With respect to</span>
-          <div className={styles.pillGroup} role="group" aria-label="Variable">
-            {WRT_OPTIONS.map(v => (
-              <button
-                key={v}
-                className={`${styles.pill} ${wrt === v ? styles.pillActive : ''}`}
-                onClick={() => setWrt(v)}
-                type="button"
-                aria-pressed={wrt === v}
-              >
-                {v}
-              </button>
-            ))}
+          <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>Wrt</span>
+            <div className={styles.pillGroup} role="group" aria-label="Variable">
+              {WRT_OPTIONS.map(v => (
+                <button
+                  key={v}
+                  className={`${styles.pill} ${wrt === v ? styles.pillActive : ''}`}
+                  onClick={() => setWrt(v)}
+                  type="button"
+                  aria-pressed={wrt === v}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

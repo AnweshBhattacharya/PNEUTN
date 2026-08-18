@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px var(--sp-3);
+  padding: 4px var(--sp-3);
   cursor: pointer;
   user-select: none;
   transition: background var(--duration-fast);
@@ -19,13 +19,13 @@
 .header:hover { background: var(--surface-hover); }
 .headerTitle {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   letter-spacing: var(--tracking-button);
   text-transform: uppercase;
   color: var(--content-tertiary);
 }
 .headerChevron {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--content-tertiary);
   transition: transform var(--duration-fast) var(--ease-out);
 }
@@ -33,10 +33,10 @@
 
 /* One-row compact layout */
 .body {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: 4px;
   border-top: 1px solid var(--border-color);
   animation: fadeUp var(--duration-base) var(--ease-out) both;
 }
@@ -46,11 +46,11 @@
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 6px;
 }
 .label {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--content-tertiary);
@@ -58,37 +58,37 @@
 }
 .nValue {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 9px;
   font-weight: 700;
   color: var(--content-primary);
-  min-width: 28px;
+  min-width: 24px;
   text-align: right;
 }
 .slider {
   width: 100%;
   -webkit-appearance: none;
-  height: 3px;
+  height: 2px;
   background: var(--border-color);
-  border-radius: 2px;
+  border-radius: 1px;
   cursor: pointer;
   outline: none;
 }
 .slider:hover { background: var(--content-tertiary); }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px; height: 14px;
+  width: 12px; height: 12px;
   background: var(--content-primary);
-  border: 2px solid var(--surface-raised);
+  border: 1px solid var(--surface-raised);
   cursor: pointer;
   border-radius: 50%;
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-fast);
 }
-.slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+.slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .slider::-moz-range-thumb {
-  width: 14px; height: 14px;
+  width: 12px; height: 12px;
   background: var(--content-primary);
-  border: 2px solid var(--surface-raised);
+  border: 1px solid var(--surface-raised);
   border-radius: 50%;
 }
 
@@ -96,15 +96,15 @@
 .sampleRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 6px;
 }
-.pillGroup { display: flex; gap: 3px; }
+.pillGroup { display: flex; gap: 2px; }
 .pill {
   font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 2px 9px;
+  font-size: 9px;
+  padding: 2px 7px;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
@@ -123,30 +123,30 @@
 /* Results: one compact row per value */
 .results {
   display: flex;
-  gap: var(--sp-2);
+  gap: 4px;
   flex-wrap: wrap;
   animation: fadeIn var(--duration-base) var(--ease-out) both;
 }
 .resultRow {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
+  gap: 4px;
+  padding: 2px 6px;
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   flex: 1;
-  min-width: 100px;
+  min-width: 90px;
 }
 .resultLabel {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--content-tertiary);
   flex: 1;
 }
 .resultValue {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 9px;
   font-weight: 700;
   color: var(--content-primary);
 }

@@ -20,9 +20,14 @@
     transform var(--duration-fast) var(--ease-out);
   user-select: none;
   white-space: nowrap;
+  position: relative;
+}
+.btn:hover:not(.disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .btn:active:not(.disabled) {
-  transform: scale(0.97);
+  transform: scale(0.97) translateY(0);
 }
 
 /* ── Variants ── */

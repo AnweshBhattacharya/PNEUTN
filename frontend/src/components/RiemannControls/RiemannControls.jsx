@@ -47,13 +47,14 @@ export default function RiemannControls({ exprStr, bounds = [0, 4], onRectangles
       <div className={styles.header}
         onClick={() => setOpen(o => !o)}
         role="button" aria-expanded={open} tabIndex={0}
+        aria-controls="riemann-body"
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}>
         <span className={styles.headerTitle}>Riemann Sum</span>
         <span className={`${styles.headerChevron} ${open ? styles.headerChevronOpen : ''}`}>▼</span>
       </div>
 
       {open && (
-        <div className={styles.body}>
+        <div id="riemann-body" className={styles.body}>
           {/* Slider row */}
           <div className={styles.sliderRow}>
             <span className={styles.label}>n</span>

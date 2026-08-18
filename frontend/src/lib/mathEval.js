@@ -49,6 +49,13 @@ export function sample1D(exprStr, xMin, xMax, nPoints = 200, extraVars = {}) {
   const compiled = compileExpr(exprStr)
   if (!compiled) return []
 
+  // Guard: nPoints ≤ 0 → empty; nPoints === 1 → single sample at xMin (no division)
+  if (nPoints <= 0) return []
+  if (nPoints === 1) {
+    const y = evalAt(compiled, { x: xMin, ...extraVars })
+    return y !== null ? [{ x: xMin, y }] : []
+  }
+
   const points = []
   const step = (xMax - xMin) / (nPoints - 1)
 

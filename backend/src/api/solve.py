@@ -12,6 +12,7 @@ including sub-steps for sums, products, and chain rule expansions.
 See ARCHITECTURE.md §3.
 """
 import json
+import logging
 import os
 import sympy
 from sympy import (
@@ -24,6 +25,8 @@ from sympy import (
 
 from safe_parse import safe_parse, ExpressionError
 
+logger = logging.getLogger(__name__)
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
 # ── Narration templates ─────────────────────────────────────────────────────
@@ -35,6 +38,9 @@ _NARRATION = {
     "chain_rule":           "Chain Rule: differentiate the outer function, then multiply by the derivative of the inner function.",
     "sum_rule":             "Sum Rule: the derivative of each term is computed independently.",
     "constant_factor":      "Constant Multiple Rule: pull the constant coefficient outside the derivative.",
+    "trig_rule":            "Standard trigonometric derivative identity applied directly.",
+    "exp_rule":             "The derivative of eˣ with respect to x is eˣ.",
+    "log_rule":             "The derivative of ln(x) with respect to x is 1/x.",
     "u_substitution":       "Use u-substitution — let u equal the inner expression, then integrate with respect to u.",
     "integration_by_parts": "Integration by Parts: ∫u dv = uv − ∫v du.",
     "power_rule_integral":  "Reverse Power Rule: increase the exponent by 1, then divide by the new exponent.",
@@ -81,7 +87,9 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
             step["narrated_by"]  = "gemini"
         return steps
-    except Exception:
+    except Exception as exc:
+        logger.warning("Gemini narration failed (%s: %s); falling back to templates.",
+                       type(exc).__name__, str(exc)[:200])
         return _fallback_narrate(steps, wrt)
 
 
@@ -114,8 +122,12 @@ def _diff_rule(expr: sympy.Expr, wrt: Symbol) -> str:
         if base.has(wrt) and not exp_.has(wrt):
             return "power_rule" if isinstance(base, Symbol) else "chain_rule"
         return "chain_rule"
-    if isinstance(expr, (sin, cos, tan, exp, log, sqrt, asin, acos, atan, sinh, cosh, tanh)):
-        return "chain_rule" if expr.args[0] != wrt else "power_rule"
+    if isinstance(expr, (sin, cos, tan, asin, acos, atan, sinh, cosh, tanh)):
+        return "chain_rule" if expr.args[0] != wrt else "trig_rule"
+    if isinstance(expr, (exp,)):
+        return "chain_rule" if expr.args[0] != wrt else "exp_rule"
+    if isinstance(expr, (log, sqrt)):
+        return "chain_rule" if expr.args[0] != wrt else "log_rule"
     if expr.is_number:
         return "constant"
     return "default"
@@ -320,7 +332,10 @@ def _integral_steps(expr: sympy.Expr, wrt: Symbol, bounds) -> tuple[sympy.Expr, 
     else:
         antideriv = integrate(expr, wrt)
         if bounds:
-            after = f"{latex(antideriv)} \\Big|_{{{latex(sympy.sympify(str(bounds[0])))}}}^{{{latex(sympy.sympify(str(bounds[1])))}}}"
+            # Construct from validated Python numbers — never from strings (SECURITY_POLICY.md)
+            _lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
+            _hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
+            after = f"{latex(antideriv)} \\Big|_{{{latex(_lo)}}}^{{{latex(_hi)}}}"
         else:
             after = f"{latex(antideriv)} + C"
 
@@ -358,8 +373,8 @@ def _integral_steps(expr: sympy.Expr, wrt: Symbol, bounds) -> tuple[sympy.Expr, 
             steps.append({"rule": rule, "before_latex": indef, "after_latex": after})
 
     if bounds:
-        lo = sympy.sympify(str(bounds[0]))
-        hi = sympy.sympify(str(bounds[1]))
+        lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
+        hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
         result = integrate(expr, (wrt, lo, hi))
         antideriv_sym = integrate(expr, wrt)
         bound_latex = f"{latex(antideriv_sym)} \\Big|_{{{latex(lo)}}}^{{{latex(hi)}}}"
@@ -380,7 +395,8 @@ def _integral_steps(expr: sympy.Expr, wrt: Symbol, bounds) -> tuple[sympy.Expr, 
 
 # ── Numeric sampling ────────────────────────────────────────────────────────
 
-def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7) -> list[dict]:
+def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7,
+                    wrt_name: str = "x") -> list[dict]:
     try:
         import numpy as np
         xs = np.linspace(-3, 3, n)
@@ -389,7 +405,7 @@ def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7) -> list[dict]:
             try:
                 y = float(result.subs(wrt, xv).evalf())
                 if abs(y) < 1e10:
-                    samples.append({"x": round(float(xv), 4), "y": round(y, 6)})
+                    samples.append({wrt_name: round(float(xv), 4), "y": round(y, 6)})
             except Exception:
                 pass
         return samples
@@ -401,7 +417,7 @@ def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7) -> list[dict]:
             try:
                 y = float(result.subs(wrt, xv).evalf())
                 if abs(y) < 1e10:
-                    samples.append({"x": xv, "y": round(y, 6)})
+                    samples.append({wrt_name: xv, "y": round(y, 6)})
             except Exception:
                 pass
         return samples
@@ -452,10 +468,23 @@ def handle(body: dict) -> dict:
             result, steps = _derivative_steps(expr, wrt, order)
         else:
             bounds = body.get("bounds", None)
+            if bounds is not None:
+                if not isinstance(bounds, list) or len(bounds) != 2:
+                    return _error("malformed_request",
+                                  "'bounds' must be a two-element array [lower, upper].", 400)
+                validated_bounds = []
+                for i, b in enumerate(bounds):
+                    if not isinstance(b, (int, float)) or isinstance(b, bool):
+                        return _error("malformed_request",
+                                      f"bounds[{i}] must be a number, got {type(b).__name__}.", 400)
+                    if b != b:  # NaN check
+                        return _error("malformed_request", f"bounds[{i}] is NaN.", 400)
+                    validated_bounds.append(b)
+                bounds = validated_bounds
             result, steps = _integral_steps(expr, wrt, bounds)
 
         steps  = _gemini_narrate(steps, wrt_str)
-        samples = _numeric_sample(result, wrt)
+        samples = _numeric_sample(result, wrt, wrt_name=wrt_str)
 
         return {
             "statusCode": 200,

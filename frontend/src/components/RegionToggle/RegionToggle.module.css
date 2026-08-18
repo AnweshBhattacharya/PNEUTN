@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px var(--sp-3);
+  padding: 4px var(--sp-3);
   cursor: pointer;
   user-select: none;
   transition: background var(--duration-fast);
@@ -19,35 +19,35 @@
 .header:hover { background: var(--surface-hover); }
 .headerTitle {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   letter-spacing: var(--tracking-button);
   text-transform: uppercase;
   color: var(--content-tertiary);
 }
 .headerChevron {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--content-tertiary);
   transition: transform var(--duration-fast) var(--ease-out);
 }
 .headerChevronOpen { transform: rotate(180deg); }
 
 .body {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-1) var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: 4px;
   border-top: 1px solid var(--border-color);
   animation: fadeUp var(--duration-base) var(--ease-out) both;
 }
 .hint {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--content-tertiary);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 .label {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--content-tertiary);
@@ -57,13 +57,13 @@
 .curveRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--sp-2);
+  gap: 6px;
 }
-.curveInput { display: flex; flex-direction: column; gap: 2px; }
+.curveInput { display: flex; flex-direction: column; gap: 1px; }
 .input {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  padding: 5px 8px;
+  font-size: 9px;
+  padding: 4px 6px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
@@ -76,15 +76,15 @@
 .actionRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: 6px;
   flex-wrap: wrap;
 }
 .computeBtn {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 5px 12px;
+  padding: 4px 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -95,8 +95,8 @@
 .computeBtn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--content-tertiary); }
 .computeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.orderToggle { display: flex; align-items: center; gap: var(--sp-1); margin-left: auto; }
-.orderLabel { font-family: var(--font-mono); font-size: 10px; color: var(--content-tertiary); }
+.orderToggle { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.orderLabel { font-family: var(--font-mono); font-size: 9px; color: var(--content-tertiary); }
 .orderPills {
   display: flex;
   border: 1px solid var(--border-color);
@@ -105,8 +105,8 @@
 }
 .orderPill {
   font-family: var(--font-mono);
-  font-size: 10px;
-  padding: 4px 10px;
+  font-size: 9px;
+  padding: 3px 8px;
   border: none;
   background: transparent;
   color: var(--content-secondary);

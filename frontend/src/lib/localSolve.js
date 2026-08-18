@@ -230,7 +230,7 @@ function integrateSimple(node, wrt) {
       const n = parseFloat(expNode.toString())
       if (!isNaN(n) && n !== -1) {
         const newExp = n + 1
-        return `${wrt}^${newExp} / ${newExp}`
+        return `${wrt}^(${newExp}) / (${newExp})`
       }
     }
   }
