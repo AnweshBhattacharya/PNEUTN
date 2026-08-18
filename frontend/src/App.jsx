@@ -112,8 +112,17 @@ export default function App() {
   const [showWireframe3D,setShowWireframe3D]= useState(true)
 
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
+  const activeCurveIndex = equations.findIndex(e => e.id === activeId)
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
+
+  // Mobile tab switch resize trigger (Bug 7 / Bug 11)
+  useEffect(() => {
+    if (mobilePanel === 'graph') {
+      const timer = setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
+      return () => clearTimeout(timer)
+    }
+  }, [mobilePanel])
 
   // ── equation management ───────────────────────────────────────────
   const addEquation = () => {
@@ -586,6 +595,7 @@ export default function App() {
               {graphMode === '2d' && (
                 <GraphCanvas2D
                   equations={graphEquations}
+                  activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
                   overlayRectangles={riemannRects}
                   showArea={showArea}
                   regionVertices={regionVertices}

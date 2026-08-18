@@ -78,11 +78,15 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
             "Return a JSON array of strings, one per step.\n\n"
             + "\n".join(lines)
         )
-        response = model.generate_content(prompt)
-        text = response.text.strip()
-        if text.startswith("```"):
-            text = "\n".join(text.split("\n")[1:-1])
-        narrations = json.loads(text)
+        import re
+        match = re.search(r'\[.*\]', text, re.DOTALL)
+        if match:
+            narrations = json.loads(match.group(0))
+        elif text.startswith("```"):
+            clean_text = "\n".join(text.split("\n")[1:-1])
+            narrations = json.loads(clean_text)
+        else:
+            narrations = json.loads(text)
         for i, step in enumerate(steps):
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
             step["narrated_by"]  = "gemini"

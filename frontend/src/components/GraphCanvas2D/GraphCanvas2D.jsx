@@ -177,6 +177,7 @@ const DEFAULT_X_MAX = 6
 
 export default function GraphCanvas2D({
   equations = [],
+  activeCurveIndex = 0,
   overlayRectangles = [],
   showArea = false,
   areaValue = null,
@@ -188,6 +189,7 @@ export default function GraphCanvas2D({
   markedX = null,
   xRangeMin = null,
   xRangeMax = null,
+  extraVars = {},
 }) {
   const mountRef        = useRef(null)
   const sceneRef        = useRef(null)
@@ -229,6 +231,16 @@ export default function GraphCanvas2D({
   const [viewBounds, setViewBounds] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ w: 600, h: 400 })
 
+  // Escape key to close expanded view (Bug 5)
+  useEffect(() => {
+    if (!isExpanded) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsExpanded(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isExpanded])
+
   // Respect custom x-range if provided
   const xMin = xRangeMin ?? DEFAULT_X_MIN
   const xMax = xRangeMax ?? DEFAULT_X_MAX
@@ -260,7 +272,7 @@ export default function GraphCanvas2D({
     const [xL, xR] = getViewBoundsRef.current()
     curveLinesRef.current.forEach(({ posAttr, expr, line }) => {
       if (!posAttr || !expr) return
-      const pts = sample1D(expr, xL, xR, N_POINTS)
+      const pts = sample1D(expr, xL, xR, N_POINTS, extraVars)
       const arr = posAttr.array
       const cnt = Math.min(pts.length, N_POINTS)
       for (let i = 0; i < cnt; i++) {
@@ -283,7 +295,7 @@ export default function GraphCanvas2D({
       posAttr.needsUpdate = true
       line.geometry.setDrawRange(0, cnt)
     })
-  }, [])
+  }, [extraVars])
 
   const buildStaticGeo = useCallback(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -724,15 +736,15 @@ export default function GraphCanvas2D({
     pos.setXYZ(0, markedX, -50, 0.01); pos.setXYZ(1, markedX, 50, 0.01)
     pos.needsUpdate = true; mxLine.computeLineDistances(); mxLine.visible = true
 
-    // Place dot on the first curve at markedX
-    const firstExpr = curveLinesRef.current[0]?.expr
-    if (firstExpr) {
-      const [pt] = sample1D(firstExpr, markedX, markedX, 1)
+    // Place dot on the active curve at markedX
+    const targetExpr = curveLinesRef.current[activeCurveIndex]?.expr || curveLinesRef.current[0]?.expr
+    if (targetExpr) {
+      const [pt] = sample1D(targetExpr, markedX, markedX, 1, extraVars)
       if (pt) {
         mxDot.position.set(markedX, pt.y, 0.05); mxDot.visible = true
       }
     }
-  }, [markedX])
+  }, [markedX, activeCurveIndex, extraVars])
 
   // ── Riemann rectangles — in-place pool (ARCHITECTURE.md §1, F2) ─────────
   useEffect(() => {

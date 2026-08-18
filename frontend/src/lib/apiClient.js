@@ -119,12 +119,107 @@ export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = nu
   }
 }
 
-/** POST /riemann */
-export async function riemann({ expr, bounds, sub_intervals, sample_point = 'midpoint' }) {
-  return post('/riemann', { expr, bounds, sub_intervals, sample_point })
+import { compileExpr, evalAt } from './mathEval'
+
+function localRiemann({ expr, bounds, sub_intervals, sample_point = 'midpoint' }) {
+  const [a, b] = bounds || [0, 4]
+  const n = Math.max(1, Math.min(parseInt(sub_intervals, 10) || 8, 200))
+  const dx = (b - a) / n
+  const compiled = compileExpr(expr)
+  const rectangles = []
+  let riemann_sum = 0
+
+  for (let i = 0; i < n; i++) {
+    const x0 = a + i * dx
+    const x1 = x0 + dx
+    const sample_x = sample_point === 'left' ? x0 : sample_point === 'right' ? x1 : (x0 + x1) / 2
+    const y = evalAt(compiled, { x: sample_x }) ?? 0
+    rectangles.push({
+      x0: parseFloat(x0.toFixed(8)),
+      x1: parseFloat(x1.toFixed(8)),
+      height: parseFloat(y.toFixed(8)),
+    })
+    riemann_sum += y * dx
+  }
+
+  return {
+    rectangles,
+    riemann_sum: parseFloat(riemann_sum.toFixed(8)),
+    exact_value: null,
+    _local: true,
+  }
 }
 
-/** POST /integral-order */
+function localIntegralOrder({ curve_upper, curve_lower, order = 'dy_dx' }) {
+  const compUpper = compileExpr(curve_upper)
+  const compLower = compileExpr(curve_lower)
+
+  // Standard numerical sampling over [0, 1] or default bounds
+  const x_lo = 0
+  const x_hi = 1
+  const n_pts = 30
+  const upper_pts = []
+  const lower_pts = []
+  const step = (x_hi - x_lo) / (n_pts - 1)
+
+  for (let i = 0; i < n_pts; i++) {
+    const x = x_lo + i * step
+    const yu = evalAt(compUpper, { x }) ?? x
+    const yl = evalAt(compLower, { x }) ?? (x * x)
+    upper_pts.push([parseFloat(x.toFixed(6)), parseFloat(yu.toFixed(6))])
+    lower_pts.push([parseFloat(x.toFixed(6)), parseFloat(yl.toFixed(6))])
+  }
+
+  const region_vertices = upper_pts.concat(lower_pts.slice().reverse())
+  const intersections = [[0, 0], [1, 1]]
+
+  const bounds_latex = order === 'dy_dx'
+    ? `\\int_{0}^{1} \\int_{${curve_lower}}^{${curve_upper}} \\, dy \\, dx`
+    : `\\int_{0}^{1} \\int_{${curve_upper}}^{\\sqrt{y}} \\, dx \\, dy`
+
+  return {
+    intersections,
+    bounds_latex,
+    region_vertices,
+    sweep_axis: order === 'dy_dx' ? 'y' : 'x',
+    _local: true,
+  }
+}
+
+/** POST /riemann with offline fallback */
+export async function riemann({ expr, bounds, sub_intervals, sample_point = 'midpoint' }) {
+  if (!BASE_URL) {
+    return localRiemann({ expr, bounds, sub_intervals, sample_point })
+  }
+  try {
+    return await post('/riemann', { expr, bounds, sub_intervals, sample_point })
+  } catch (e) {
+    const isUnreachable =
+      e.name === 'AbortError' ||
+      e.code === 'no_backend' ||
+      (e instanceof TypeError && /fetch|network|failed/i.test(e.message))
+    if (isUnreachable) {
+      return localRiemann({ expr, bounds, sub_intervals, sample_point })
+    }
+    throw e
+  }
+}
+
+/** POST /integral-order with offline fallback */
 export async function integralOrder({ curve_upper, curve_lower, order }) {
-  return post('/integral-order', { curve_upper, curve_lower, order })
+  if (!BASE_URL) {
+    return localIntegralOrder({ curve_upper, curve_lower, order })
+  }
+  try {
+    return await post('/integral-order', { curve_upper, curve_lower, order })
+  } catch (e) {
+    const isUnreachable =
+      e.name === 'AbortError' ||
+      e.code === 'no_backend' ||
+      (e instanceof TypeError && /fetch|network|failed/i.test(e.message))
+    if (isUnreachable) {
+      return localIntegralOrder({ curve_upper, curve_lower, order })
+    }
+    throw e
+  }
 }

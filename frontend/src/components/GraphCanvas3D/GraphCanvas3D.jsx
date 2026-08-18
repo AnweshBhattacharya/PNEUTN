@@ -129,6 +129,16 @@ export default function GraphCanvas3D({
   const [autoRotate, setAutoRotate] = useState(true)
   const [volumeEst,  setVolumeEst]  = useState(null)
 
+  // Escape key to close expanded view (Bug 5 / Bug 10)
+  useEffect(() => {
+    if (!isExpanded) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsExpanded(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isExpanded])
+
   useEffect(() => { autoRotateRef.current = autoRotate }, [autoRotate])
 
   useEffect(() => {
@@ -269,7 +279,11 @@ export default function GraphCanvas3D({
     skirtGeo.setIndex(skirtIdx)
 
     const skirtMat = new THREE.MeshBasicMaterial({
-      color: 0x2563eb, transparent: true, opacity: 0.16, side: THREE.DoubleSide
+      color: 0x2563eb,
+      transparent: true,
+      opacity: 0.16,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     })
     const skirtMesh = new THREE.Mesh(skirtGeo, skirtMat)
     scene.add(skirtMesh)
@@ -283,7 +297,11 @@ export default function GraphCanvas3D({
     floorPosAttr.setUsage(THREE.DynamicDrawUsage)
     floorPosRef.current = floorPosAttr
     const floorMat = new THREE.MeshBasicMaterial({
-      color: 0x2563eb, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+      color: 0x2563eb,
+      transparent: true,
+      opacity: 0.12,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     })
     const floorMesh = new THREE.Mesh(floorGeo, floorMat)
     scene.add(floorMesh)
@@ -468,15 +486,21 @@ export default function GraphCanvas3D({
 
     let zMin = Infinity, zMax = -Infinity
     let sumZ = 0
+    let validCount = 0
     for (let i = 0; i < n; i++) {
       const z = zVals[i]
       if (isFinite(z)) {
         zMin = Math.min(zMin, z)
         zMax = Math.max(zMax, z)
         sumZ += z
+        validCount++
       }
     }
-    const zRange = zMax - zMin || 1
+    if (validCount === 0 || !isFinite(zMin) || !isFinite(zMax)) {
+      zMin = -1
+      zMax = 1
+    }
+    const zRange = (zMax === zMin || zMax - zMin === 0) ? 1 : (zMax - zMin)
     const xStep = (xMax - xMin) / SEGMENTS
     const yStep = (yMax - yMin) / SEGMENTS
     const dA = xStep * yStep
@@ -494,7 +518,7 @@ export default function GraphCanvas3D({
         pos[idx * 3 + 1] = z
         pos[idx * 3 + 2] = yCoord
 
-        const t = Math.max(0, Math.min(1, (z - zMin) / zRange))
+        const t = (zMax === zMin) ? 0.5 : Math.max(0, Math.min(1, (z - zMin) / zRange))
         const c = heightColor(t)
         col[idx * 3]     = c.r
         col[idx * 3 + 1] = c.g
