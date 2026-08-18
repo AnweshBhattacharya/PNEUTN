@@ -1,8 +1,9 @@
-/* RiemannControls.module.css */
+/* RiemannControls.module.css — compact inline layout */
 
 .wrapper {
   border-top: 1px solid var(--border-color);
   background: var(--surface-raised);
+  flex-shrink: 0;
   animation: fadeUp var(--duration-slow) var(--ease-out) 80ms both;
 }
 
@@ -10,11 +11,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-2) var(--sp-4);
-  border-bottom: 1px solid var(--border-color);
+  padding: 6px var(--sp-3);
   cursor: pointer;
   user-select: none;
+  transition: background var(--duration-fast);
 }
+.header:hover { background: var(--surface-hover); }
 .headerTitle {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
@@ -23,74 +25,58 @@
   color: var(--content-tertiary);
 }
 .headerChevron {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--content-tertiary);
   transition: transform var(--duration-fast) var(--ease-out);
 }
-.headerChevronOpen {
-  transform: rotate(180deg);
-}
+.headerChevronOpen { transform: rotate(180deg); }
 
+/* One-row compact layout */
 .body {
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
+  border-top: 1px solid var(--border-color);
   animation: fadeUp var(--duration-base) var(--ease-out) both;
 }
 
+/* Slider row: label + value + slider all inline */
+.sliderRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-2);
+}
 .label {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   text-transform: uppercase;
-  letter-spacing: var(--tracking-button);
+  letter-spacing: 0.06em;
   color: var(--content-tertiary);
+  white-space: nowrap;
 }
-
-/* ── Slider ── */
-.sliderRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.sliderHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .nValue {
   font-family: var(--font-mono);
-  font-size: var(--text-mono);
+  font-size: var(--text-tiny);
   font-weight: 700;
   color: var(--content-primary);
-  background: var(--surface-sunken);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-  min-width: 40px;
-  text-align: center;
-  transition: background var(--duration-fast);
+  min-width: 28px;
+  text-align: right;
 }
-
 .slider {
   width: 100%;
   -webkit-appearance: none;
-  height: 4px;
+  height: 3px;
   background: var(--border-color);
   border-radius: 2px;
   cursor: pointer;
   outline: none;
-  transition: background var(--duration-fast);
 }
-.slider:hover {
-  background: var(--content-tertiary);
-}
+.slider:hover { background: var(--content-tertiary); }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px; height: 14px;
   background: var(--content-primary);
   border: 2px solid var(--surface-raised);
   cursor: pointer;
@@ -98,50 +84,35 @@
   box-shadow: var(--shadow-sm);
   transition: transform var(--duration-fast);
 }
-.slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 14px; height: 14px;
   background: var(--content-primary);
   border: 2px solid var(--surface-raised);
-  cursor: pointer;
   border-radius: 50%;
-  box-shadow: var(--shadow-sm);
 }
 
-/* ── Sample point pill toggle ── */
+/* Sample point row: label + pills inline */
 .sampleRow {
   display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
+  align-items: center;
+  gap: var(--sp-2);
 }
-
-.pillGroup {
-  display: flex;
-  gap: 4px;
-}
-
+.pillGroup { display: flex; gap: 3px; }
 .pill {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: 0.04em;
-  padding: 4px 12px;
+  font-size: 10px;
+  padding: 2px 9px;
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: 12px;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
 }
 .pill:hover:not(.pillActive) {
   background: var(--surface-hover);
   color: var(--content-primary);
-  border-color: var(--content-tertiary);
 }
 .pillActive {
   background: var(--content-primary);
@@ -149,47 +120,43 @@
   border-color: var(--content-primary);
 }
 
-/* ── Results ── */
+/* Results: one compact row per value */
 .results {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  animation: fadeUp var(--duration-base) var(--ease-out) both;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  animation: fadeIn var(--duration-base) var(--ease-out) both;
 }
-
 .resultRow {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--sp-2) var(--sp-3);
+  gap: 6px;
+  padding: 3px 8px;
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
+  flex: 1;
+  min-width: 100px;
 }
-
 .resultLabel {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: 0.04em;
+  font-size: 10px;
   color: var(--content-tertiary);
+  flex: 1;
 }
-
 .resultValue {
   font-family: var(--font-mono);
-  font-size: var(--text-mono);
+  font-size: var(--text-tiny);
   font-weight: 700;
   color: var(--content-primary);
 }
-
-.resultDiff {
-  color: var(--color-success);
-}
+.resultDiff { color: var(--color-success); }
 
 .error {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   color: var(--color-error);
-  padding: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
   border-radius: var(--radius-sm);

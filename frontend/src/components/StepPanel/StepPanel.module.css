@@ -23,12 +23,7 @@
   gap: var(--sp-2);
   flex-shrink: 0;
 }
-
-.headerRight {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
+.headerRight { display: flex; align-items: center; gap: var(--sp-2); }
 
 .localBadge {
   font-size: 10px;
@@ -39,11 +34,7 @@
   color: var(--color-warning);
   letter-spacing: 0.04em;
 }
-
-.stepCount {
-  color: var(--accent);
-  font-weight: 700;
-}
+.stepCount { color: var(--accent); font-weight: 700; }
 
 /* ── Empty state ── */
 .empty {
@@ -52,23 +43,26 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-6) var(--sp-5);
+  padding: var(--sp-5) var(--sp-4);
   text-align: center;
   gap: var(--sp-3);
 }
-
 .emptyIcon {
-  font-size: 40px;
-  opacity: 0.15;
+  font-size: 48px;
+  opacity: 0.1;
   font-family: var(--font-mono);
   user-select: none;
+  animation: floatIcon 3s ease-in-out infinite;
 }
-
+@keyframes floatIcon {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-6px); }
+}
 .emptyText {
   font-family: var(--font-body);
   font-size: var(--text-small);
   color: var(--content-tertiary);
-  max-width: 260px;
+  max-width: 220px;
   line-height: 1.7;
 }
 
@@ -77,12 +71,17 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  margin: var(--sp-3) var(--sp-4);
+  margin: var(--sp-3);
   padding: var(--sp-3);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
-  border-radius: var(--radius-sm);
-  animation: fadeUp var(--duration-base) var(--ease-out) both;
+  border-left: 3px solid var(--color-error);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  animation: slideInLeft var(--duration-base) var(--ease-out) both;
+}
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
 }
 .errorCode {
   font-family: var(--font-mono);
@@ -98,18 +97,22 @@
   line-height: 1.5;
 }
 
-/* ── Result box ── */
+/* ── Result box — prominent ── */
 .resultBox {
-  margin: var(--sp-3) var(--sp-4) 0;
+  margin: var(--sp-3) var(--sp-3) 0;
   padding: var(--sp-3) var(--sp-4);
-  background: var(--surface-deep, var(--surface-sunken));
-  border: 1px solid var(--border-medium, var(--border-color));
-  border-left: 3px solid var(--content-primary);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--content-primary);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  animation: scaleIn var(--duration-slow) var(--ease-out) both;
+  animation: resultReveal var(--duration-slow) var(--ease-out) both;
+}
+@keyframes resultReveal {
+  from { opacity: 0; transform: scale(0.97) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 .resultLabel {
   font-family: var(--font-mono);
@@ -121,6 +124,8 @@
 .resultLatex {
   overflow-x: auto;
   padding: var(--sp-1) 0;
+  /* Make result LaTeX render larger */
+  font-size: 1.15em;
 }
 
 /* ── Step list ── */
@@ -137,15 +142,19 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  animation: fadeUp var(--duration-slow) var(--ease-out) both;
-  transition: border-color var(--duration-fast), background var(--duration-fast);
+  /* Staggered slide-up animation driven by inline animationDelay */
+  animation: stepSlideUp var(--duration-slow) var(--ease-out) both;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+}
+@keyframes stepSlideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .step:hover {
   border-color: var(--border-medium, var(--content-tertiary));
-  background: var(--surface-muted, var(--surface-raised));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
-/* Collapsible step header */
 .stepHeader {
   width: 100%;
   display: flex;
@@ -159,9 +168,7 @@
   gap: var(--sp-2);
   transition: background var(--duration-fast);
 }
-.stepHeader:hover {
-  background: var(--surface-hover);
-}
+.stepHeader:hover { background: var(--surface-hover); }
 
 .stepMeta {
   display: flex;
@@ -170,14 +177,13 @@
   flex-wrap: wrap;
   flex: 1;
 }
-
 .stepNum {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   color: var(--content-tertiary);
   letter-spacing: 0.05em;
+  min-width: 40px;
 }
-
 .ruleChip {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -189,11 +195,9 @@
   color: var(--content-secondary);
   background: var(--surface-sunken);
 }
-
 .narratedBy {
   font-family: var(--font-mono);
   font-size: 9px;
-  letter-spacing: 0.05em;
   padding: 2px 6px;
   border-radius: 8px;
   border: 1px solid;
@@ -207,16 +211,22 @@
   color: var(--content-tertiary);
   border-color: var(--border-color);
 }
-
+.subChip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .stepChevron {
   font-size: 9px;
   color: var(--content-tertiary);
   transition: transform var(--duration-fast) var(--ease-out);
   flex-shrink: 0;
 }
-.stepChevronOpen {
-  transform: rotate(180deg);
-}
+.stepChevronOpen { transform: rotate(180deg); }
 
 /* ── Step body ── */
 .stepBody {
@@ -233,17 +243,11 @@
   flex-direction: column;
   gap: 6px;
   padding: var(--sp-2) var(--sp-3);
-  background: var(--surface-active, var(--surface-sunken));
+  background: var(--surface-sunken);
   border-radius: var(--radius-sm);
-  border-left: 2px solid var(--border-medium, var(--border-color));
+  border-left: 2px solid var(--border-color);
 }
-
-.transformRow {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
+.transformRow { display: flex; flex-direction: column; gap: 2px; }
 .transformLabel {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -251,58 +255,36 @@
   color: var(--content-tertiary);
   text-transform: uppercase;
 }
-
-.katexWrap {
-  overflow-x: auto;
-  padding: 2px 0;
-}
-
-.arrowRow {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 2px 0;
-}
-
-.arrow {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  color: var(--content-tertiary);
-  flex-shrink: 0;
-}
-
+.katexWrap { overflow-x: auto; padding: 2px 0; }
+.arrowRow { display: flex; align-items: center; gap: var(--sp-2); padding: 2px 0; }
+.arrow { font-family: var(--font-mono); font-size: 16px; color: var(--content-tertiary); }
 .arrowLabel {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--content-tertiary);
-  letter-spacing: 0.04em;
   text-transform: capitalize;
   background: var(--surface-hover);
   padding: 1px 6px;
   border-radius: 6px;
 }
 
-/* ── Explanation ── */
+/* ── Explanation — highlighted ── */
 .explanation {
   font-family: var(--font-body);
   font-size: var(--text-small);
-  line-height: 1.65;
-  color: var(--content-secondary);
+  line-height: 1.75;
+  color: var(--content-primary);
   padding: var(--sp-2) var(--sp-3);
-  border-left: 2px solid var(--accent-muted);
+  border-left: 3px solid var(--accent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface-raised));
   margin: 0;
+  animation: fadeIn var(--duration-base) var(--ease-out) both;
 }
 
 /* ── KaTeX ── */
-.katexBlock {
-  display: block;
-  overflow-x: auto;
-}
-.katexInline {
-  display: inline;
-}
+.katexBlock { display: block; overflow-x: auto; }
+.katexInline { display: inline; }
 .rawLatex {
   font-family: var(--font-mono);
   font-size: var(--text-mono);
@@ -321,39 +303,13 @@
   border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
   border-radius: var(--radius-sm);
 }
-.substep {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
+.substep { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
 .substepLabel {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--content-tertiary);
-  letter-spacing: 0.04em;
   flex-shrink: 0;
   min-width: 120px;
 }
-.substepEq {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  color: var(--content-tertiary);
-  flex-shrink: 0;
-}
-.substepValue {
-  font-family: var(--font-mono);
-  font-size: var(--text-small);
-  color: var(--content-primary);
-  overflow-x: auto;
-}
-
-.subChip {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: var(--accent-muted);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
+.substepEq { font-family: var(--font-mono); font-size: var(--text-tiny); color: var(--content-tertiary); }
+.substepValue { font-family: var(--font-mono); font-size: var(--text-small); color: var(--content-primary); }

@@ -1,8 +1,9 @@
-/* RegionToggle.module.css */
+/* RegionToggle.module.css — compact */
 
 .wrapper {
   border-top: 1px solid var(--border-color);
   background: var(--surface-raised);
+  flex-shrink: 0;
   animation: fadeUp var(--duration-slow) var(--ease-out) 120ms both;
 }
 
@@ -10,11 +11,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--sp-2) var(--sp-4);
-  border-bottom: 1px solid var(--border-color);
+  padding: 6px var(--sp-3);
   cursor: pointer;
   user-select: none;
+  transition: background var(--duration-fast);
 }
+.header:hover { background: var(--surface-hover); }
 .headerTitle {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
@@ -23,115 +25,78 @@
   color: var(--content-tertiary);
 }
 .headerChevron {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--content-tertiary);
   transition: transform var(--duration-fast) var(--ease-out);
 }
-.headerChevronOpen {
-  transform: rotate(180deg);
-}
+.headerChevronOpen { transform: rotate(180deg); }
 
 .body {
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-2) var(--sp-3);
   display: flex;
   flex-direction: column;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
+  border-top: 1px solid var(--border-color);
   animation: fadeUp var(--duration-base) var(--ease-out) both;
 }
-
 .hint {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   color: var(--content-tertiary);
-  line-height: 1.6;
+  line-height: 1.5;
 }
-
 .label {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: var(--tracking-button);
+  letter-spacing: 0.06em;
   color: var(--content-tertiary);
-  display: block;
-  margin-bottom: 4px;
 }
 
-/* ── Curve inputs ── */
+/* Curve inputs — two on one row */
 .curveRow {
-  display: flex;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
 }
-.curveInput {
-  flex: 1;
-  min-width: 160px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
+.curveInput { display: flex; flex-direction: column; gap: 2px; }
 .input {
-  width: 100%;
   font-family: var(--font-mono);
-  font-size: var(--text-mono);
-  padding: 7px 10px;
+  font-size: var(--text-tiny);
+  padding: 5px 8px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   color: var(--content-primary);
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  transition: border-color var(--duration-fast);
 }
-.input:focus {
-  border-color: var(--accent);
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-muted);
-}
+.input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-muted); }
 
-/* ── Action row ── */
+/* Action row — button + order pills inline */
 .actionRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
-
 .computeBtn {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: var(--tracking-button);
+  font-size: 10px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 7px 16px;
+  padding: 5px 12px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--content-primary);
   cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast), border-color var(--duration-fast);
 }
-.computeBtn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--content-tertiary);
-}
-.computeBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.computeBtn:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--content-tertiary); }
+.computeBtn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Order toggle ── */
-.orderToggle {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.orderLabel {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  color: var(--content-tertiary);
-  letter-spacing: 0.04em;
-}
-
-/* Segmented 2-option pill toggle for order */
+.orderToggle { display: flex; align-items: center; gap: var(--sp-1); margin-left: auto; }
+.orderLabel { font-family: var(--font-mono); font-size: 10px; color: var(--content-tertiary); }
 .orderPills {
   display: flex;
   border: 1px solid var(--border-color);
@@ -140,94 +105,61 @@
 }
 .orderPill {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  padding: 5px 12px;
+  font-size: 10px;
+  padding: 4px 10px;
   border: none;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
   transition: background var(--duration-fast), color var(--duration-fast);
-  letter-spacing: 0.04em;
 }
-.orderPill + .orderPill {
-  border-left: 1px solid var(--border-color);
-}
-.orderPill:hover:not(.orderPillActive):not(:disabled) {
-  background: var(--surface-hover);
-  color: var(--content-primary);
-}
-.orderPillActive {
-  background: var(--content-primary);
-  color: var(--surface-base);
-}
-.orderPill:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.orderPill + .orderPill { border-left: 1px solid var(--border-color); }
+.orderPill:hover:not(.orderPillActive):not(:disabled) { background: var(--surface-hover); }
+.orderPillActive { background: var(--content-primary); color: var(--surface-base); }
+.orderPill:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* ── Sweep animation ── */
+/* Sweep + results — single compact row */
 .sweepBlock {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-2);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: var(--sp-2) var(--sp-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
   background: var(--surface-sunken);
 }
 .sweepAxis {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: 0.04em;
+  font-size: 10px;
   color: var(--content-secondary);
+  white-space: nowrap;
 }
-.sweepStrips {
-  display: flex;
-  gap: 2px;
-  height: 20px;
-}
+.sweepStrips { display: flex; gap: 1px; height: 14px; flex: 1; }
 .strip {
   flex: 1;
   border-radius: 1px;
   background: var(--border-color);
-  border: 1px solid var(--border-color);
   transition: background var(--duration-fast);
 }
-.sweeping .strip {
-  animation: fillStrip 0.7s var(--ease-out) forwards;
-}
+.sweeping .strip { animation: fillStrip 0.6s var(--ease-out) forwards; }
 @keyframes fillStrip {
   from { background: var(--border-color); }
-  to   { background: var(--content-primary); }
+  to   { background: var(--accent); }
 }
 
-/* ── Intersections ── */
-.intersections {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.intPoints {
-  display: flex;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
+.intersections { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.intPoints { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
 .intPoint {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  padding: 3px 8px;
+  font-size: 10px;
+  padding: 2px 6px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--surface-sunken);
   color: var(--content-secondary);
 }
 
-/* ── LaTeX bounds ── */
-.boundsBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+.boundsBlock { display: flex; flex-direction: column; gap: 4px; }
 .latexRender {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
@@ -237,14 +169,12 @@
   animation: scaleIn var(--duration-slow) var(--ease-out) both;
 }
 
-/* ── Error ── */
 .error {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   color: var(--color-error);
-  padding: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
   border-radius: var(--radius-sm);
-  line-height: 1.5;
 }

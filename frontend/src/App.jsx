@@ -141,7 +141,7 @@ export default function App() {
 
       {/* ── Top bar ── */}
       <header className={styles.topBar}>
-        <span className={styles.brand}>Pneutn</span>
+        <span className={styles.brand}>PNEUTN</span>
 
         <nav className={styles.topBarCenter} aria-label="Examples">
           {EXAMPLE_EXPRS.map((ex, i) => (
@@ -153,7 +153,7 @@ export default function App() {
         </nav>
 
         <div className={styles.topBarRight}>
-          {equations.length >= 2 && (
+          {equations.length >= 1 && (
             <label className={styles.areaToggle}>
               <span className={styles.toggle}>
                 <input type="checkbox" checked={showArea}
@@ -268,7 +268,7 @@ export default function App() {
             <GraphCanvas2D
               equations={graphEquations}
               overlayRectangles={riemannRects}
-              showArea={showArea && equations.length >= 2}
+              showArea={showArea}
             />
           )}
           {graphMode === '3d' && (
@@ -290,13 +290,12 @@ export default function App() {
 
           {activeEq.numericSample?.length > 0 && (
             <div className={styles.numericSample}>
-              <div className={styles.numericHeader}>Numeric sample points</div>
-              <div className={styles.numericTable}>
-                {activeEq.numericSample.map(({ x, y }, i) => (
-                  <div key={i} className={styles.numericRow}>
-                    <span className={styles.numericCell}>x = {x}</span>
-                    <span className={styles.numericCell}>y = {y}</span>
-                  </div>
+              <span className={styles.numericHeader}>Sample points</span>
+              <div className={styles.numericStrip}>
+                {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
+                  <span key={i} className={styles.numericPill}>
+                    ({x}, {y})
+                  </span>
                 ))}
               </div>
             </div>

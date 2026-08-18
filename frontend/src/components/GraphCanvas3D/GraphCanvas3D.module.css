@@ -7,10 +7,9 @@
   border-bottom: 1px solid var(--border-color);
   flex: 1 0 auto;
 }
-
 .expanded {
   position: fixed;
-  inset: 52px 0 0 0;
+  inset: 48px 0 0 0;
   z-index: 200;
   background: var(--surface-base);
   border-bottom: none;
@@ -19,28 +18,43 @@
 .toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 6px var(--sp-3);
+  padding: 4px var(--sp-3);
   border-bottom: 1px solid var(--border-color);
   background: var(--surface-raised);
   gap: var(--sp-2);
   flex-shrink: 0;
+  min-height: 34px;
 }
-
 .label {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   letter-spacing: var(--tracking-button);
   text-transform: uppercase;
   color: var(--content-tertiary);
+  flex-shrink: 0;
 }
-
+.toolbarCenter {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.rotateBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--content-tertiary);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 .toolbarRight {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  flex-shrink: 0;
 }
-
 .coordBadge {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
@@ -50,11 +64,11 @@
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   animation: fadeIn var(--duration-fast) var(--ease-out) both;
+  display: flex;
+  gap: 8px;
 }
-
 .toolBtn {
-  width: 24px;
-  height: 24px;
+  width: 24px; height: 24px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -66,21 +80,45 @@
   justify-content: center;
   transition: background var(--duration-fast), color var(--duration-fast);
   padding: 0;
+  flex-shrink: 0;
 }
-.toolBtn:hover {
-  background: var(--surface-hover);
-  color: var(--content-primary);
+.toolBtn:hover { background: var(--surface-hover); color: var(--content-primary); }
+
+/* ── Colour legend bar ── */
+.colorBar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px var(--sp-3);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+.colorBarLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--content-tertiary);
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+.colorBarGradient {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right,
+    #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);
+  opacity: 0.75;
 }
 
 .canvas {
   width: 100%;
-  /* Matches the 2D canvas responsive height */
-  height: clamp(220px, 35vw, 480px);
+  height: clamp(260px, 38vw, 520px);
   cursor: grab;
   flex: 1;
+  display: block;
 }
 .expanded .canvas {
-  height: calc(100dvh - 52px - 36px - 24px);
+  height: calc(100dvh - 48px - 34px - 22px - 22px);
 }
 .canvas:active { cursor: grabbing; }
 .canvas canvas {
@@ -94,7 +132,7 @@
   font-size: 10px;
   color: var(--content-tertiary);
   text-align: center;
-  padding: 4px;
+  padding: 3px 4px;
   border-top: 1px solid var(--border-color);
   background: var(--surface-raised);
   letter-spacing: 0.03em;
