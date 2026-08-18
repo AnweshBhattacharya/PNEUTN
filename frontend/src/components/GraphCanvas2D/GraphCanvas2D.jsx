@@ -157,11 +157,6 @@ function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
 }
 
 // ── Numerical derivative helper ───────────────────────────────────────────
-function makeDerivExpr(expr) {
-  // We approximate f'(x) numerically via a wrapper expression evaluated at x±h
-  return { _isDerivative: true, originalExpr: expr }
-}
-
 function sampleDerivative(expr, xL, xR, n) {
   const step = (xR - xL) / n
   const h = 1e-5

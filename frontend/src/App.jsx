@@ -98,6 +98,19 @@ export default function App() {
   const [xRangeMinInput, setXRangeMinInput] = useState('-6')
   const [xRangeMaxInput, setXRangeMaxInput] = useState('6')
 
+  // 3D graph parameter & limit controls
+  const [xMin3D,         setXMin3D]         = useState(-4)
+  const [xMax3D,         setXMax3D]         = useState(4)
+  const [yMin3D,         setYMin3D]         = useState(-4)
+  const [yMax3D,         setYMax3D]         = useState(4)
+  const [xMin3DInput,    setXMin3DInput]    = useState('-4')
+  const [xMax3DInput,    setXMax3DInput]    = useState('4')
+  const [yMin3DInput,    setYMin3DInput]    = useState('-4')
+  const [yMax3DInput,    setYMax3DInput]    = useState('4')
+  const [showVolume3D,   setShowVolume3D]   = useState(true)
+  const [showGrid3D,     setShowGrid3D]     = useState(true)
+  const [showWireframe3D,setShowWireframe3D]= useState(true)
+
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
@@ -453,6 +466,121 @@ export default function App() {
               </aside>
             )}
 
+            {/* ── Left sidebar: 3D controls & limit settings ── */}
+            {graphMode === '3d' && (
+              <aside className={styles.graphSidebar}>
+                {/* 3D Equation */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Surface Function</span>
+                  <div className={`${styles.curveRow} ${styles.curveRowActive}`}>
+                    <span className={styles.curveSwatch} style={{ background: '#2563eb' }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)', marginRight: 2 }}>z =</span>
+                    <input
+                      className={styles.curveExprInput}
+                      value={activeEq.expr}
+                      onChange={e => updateExpr(activeEq.id, e.target.value)}
+                      placeholder="e.g. sin(x) * cos(y)"
+                      aria-label="3D surface expression z = f(x, y)"
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
+
+                {/* 3D Limit Settings */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>3D Limit Settings</span>
+
+                  {/* X domain limits */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className={styles.areaLabel}>X Limits [x_min, x_max]</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={xMin3DInput}
+                        onChange={e => {
+                          setXMin3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          if (isFinite(v)) setXMin3D(v)
+                        }}
+                        placeholder="−4"
+                        aria-label="3D X minimum"
+                      />
+                      <span className={styles.areaLabel}>to</span>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={xMax3DInput}
+                        onChange={e => {
+                          setXMax3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          if (isFinite(v)) setXMax3D(v)
+                        }}
+                        placeholder="4"
+                        aria-label="3D X maximum"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Y domain limits */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    <span className={styles.areaLabel}>Y Limits [y_min, y_max]</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={yMin3DInput}
+                        onChange={e => {
+                          setYMin3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          if (isFinite(v)) setYMin3D(v)
+                        }}
+                        placeholder="−4"
+                        aria-label="3D Y minimum"
+                      />
+                      <span className={styles.areaLabel}>to</span>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={yMax3DInput}
+                        onChange={e => {
+                          setYMax3DInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          if (isFinite(v)) setYMax3D(v)
+                        }}
+                        placeholder="4"
+                        aria-label="3D Y maximum"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3D Visual & Volume Toggles */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Volume & Display</span>
+
+                  {[
+                    { label: 'Volume under surface (∬ z dA)', value: showVolume3D, set: setShowVolume3D },
+                    { label: '3D Floor Grid', value: showGrid3D, set: setShowGrid3D },
+                    { label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
+                  ].map(({ label, value, set }) => (
+                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
+                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
+                      <span className={styles.toggle}>
+                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
+                        <span className={styles.toggleTrack} />
+                        <span className={styles.toggleThumb} />
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </aside>
+            )}
+
             {/* ── Main graph canvas ── */}
             <div className={styles.graphMain}>
               {graphMode === '2d' && (
@@ -471,8 +599,14 @@ export default function App() {
               )}
               {graphMode === '3d' && (
                 <GraphCanvas3D
-                  exprStr={activeEq.expr || 'x^2'}
-                  xMin={-4} xMax={4} yMin={-4} yMax={4}
+                  exprStr={activeEq.expr || 'sin(x) * cos(y)'}
+                  xMin={xMin3D}
+                  xMax={xMax3D}
+                  yMin={yMin3D}
+                  yMax={yMax3D}
+                  showVolume={showVolume3D}
+                  showGrid={showGrid3D}
+                  showWireframe={showWireframe3D}
                 />
               )}
             </div>

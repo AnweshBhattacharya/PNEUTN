@@ -7,11 +7,13 @@
  * - Raycaster hover with (x, y, z) coordinate display
  * - Bold cylinder axes with +X/+Y/+Z and −X/−Y/−Z labels
  * - 3D grid background (GridHelper on XZ plane)
- * - Area under curve: semi-transparent skirt from surface boundary to base
+ * - 3D Volume under surface: semi-transparent skirt + floor enclosing volume to base plane
+ * - Interactive limit settings (xMin, xMax, yMin, yMax) updated in-place
+ * - Numerical volume approximation badge
  * - Pan/orbit drag, scroll zoom, pinch zoom, double-click reset
  * - Expand to fullscreen
  * - Theme-aware via MutationObserver
- * - Z updated in-place on expression change (ARCHITECTURE.md §1)
+ * - In-place buffer mutation on expression/limit changes (ARCHITECTURE.md §1)
  */
 import React, { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -62,10 +64,8 @@ function makeBoldAxis(from, to, color) {
   const geo = new THREE.CylinderGeometry(0.04, 0.04, len, 8)
   const mat = new THREE.MeshBasicMaterial({ color })
   const mesh = new THREE.Mesh(geo, mat)
-  // Default cylinder is along Y — position/orient to align with axis direction
   const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5)
   mesh.position.copy(mid)
-  // Align cylinder Y-axis to direction
   const axis = new THREE.Vector3(0, 1, 0)
   mesh.quaternion.setFromUnitVectors(axis, dir.normalize())
   return mesh
@@ -95,6 +95,10 @@ export default function GraphCanvas3D({
   xMin = -4, xMax = 4,
   yMin = -4, yMax = 4,
   extraVars = {},
+  showVolume = true,
+  showGrid = true,
+  showWireframe = true,
+  onVolumeCalculated = null,
 }) {
   const mountRef     = useRef(null)
   const sceneRef     = useRef(null)
@@ -103,9 +107,11 @@ export default function GraphCanvas3D({
   const meshRef      = useRef(null)
   const wireMeshRef  = useRef(null)
   const skirtMeshRef = useRef(null)   // area-under-surface skirt
+  const floorMeshRef = useRef(null)   // base floor at y=0
   const posAttrRef   = useRef(null)
   const colAttrRef   = useRef(null)
   const skirtPosRef  = useRef(null)
+  const floorPosRef  = useRef(null)
   const hoverMarkerRef = useRef(null)
   const axisGroupRef = useRef([])     // axis cylinders + labels for theme sync
   const gridRef      = useRef(null)
@@ -121,6 +127,7 @@ export default function GraphCanvas3D({
   const [hoverCoord, setHoverCoord] = useState(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [autoRotate, setAutoRotate] = useState(true)
+  const [volumeEst,  setVolumeEst]  = useState(null)
 
   useEffect(() => { autoRotateRef.current = autoRotate }, [autoRotate])
 
@@ -158,13 +165,10 @@ export default function GraphCanvas3D({
     const axisColor = c.axis
 
     const axObjs = []
-    // X axis (+/-)
     const xPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(axLen,0,0), axisColor)
     const xNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(-axLen,0,0), axisColor)
-    // Y axis (+/-)
     const yPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,axLen,0), axisColor)
     const yNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,-axLen,0), axisColor)
-    // Z axis (+/-) — in Three.js Z is depth but for math surface Y is up, Z is the "y" math axis
     const zPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,axLen), axisColor)
     const zNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-axLen), axisColor)
 
@@ -172,7 +176,6 @@ export default function GraphCanvas3D({
       scene.add(ax); axObjs.push(ax)
     }
 
-    // Arrow cones at positive ends
     function makeCone(position, direction, color) {
       const coneGeo = new THREE.ConeGeometry(0.10, 0.35, 8)
       const coneMat = new THREE.MeshBasicMaterial({ color })
@@ -212,7 +215,7 @@ export default function GraphCanvas3D({
     gridRef.current = gridHelper
 
     // ── Surface ───────────────────────────────────────────────────────
-    const geo = new THREE.PlaneGeometry(xMax - xMin, yMax - yMin, SEGMENTS, SEGMENTS)
+    const geo = new THREE.PlaneGeometry(1, 1, SEGMENTS, SEGMENTS)
     geo.rotateX(-Math.PI / 2)
 
     const posAttr = geo.getAttribute('position')
@@ -235,7 +238,7 @@ export default function GraphCanvas3D({
     const mesh = new THREE.Mesh(geo, mat)
     scene.add(mesh); meshRef.current = mesh
 
-    // Subtle wireframe overlay
+    // Wireframe overlay
     const wireMat = new THREE.MeshBasicMaterial({
       color: dark ? 0x3c3a36 : 0xd0cdc6,
       wireframe: true, transparent: true, opacity: 0.08,
@@ -244,19 +247,15 @@ export default function GraphCanvas3D({
     scene.add(wireMesh); wireMeshRef.current = wireMesh
 
     // ── Area under surface skirt ──────────────────────────────────────
-    // The skirt connects the surface boundary rows to y=0
-    // Uses SEGMENTS+1 vertices per boundary edge × 4 sides
-    const skirtVertCount = (SEGMENTS + 1) * 4 * 2  // 4 edges, 2 verts each (top+bottom)
+    const skirtVertCount = (SEGMENTS + 1) * 4 * 2
     const skirtPos = new Float32Array(skirtVertCount * 3)
     const skirtBufAttr = new THREE.BufferAttribute(skirtPos, 3)
     skirtBufAttr.setUsage(THREE.DynamicDrawUsage)
     const skirtGeo = new THREE.BufferGeometry()
     skirtGeo.setAttribute('position', skirtBufAttr)
 
-    // Build stable index for skirt triangles
     const skirtIdx = []
     const edgeN = SEGMENTS + 1
-    // 4 edges × SEGMENTS quads each
     for (let edge = 0; edge < 4; edge++) {
       const baseV = edge * edgeN * 2
       for (let i = 0; i < SEGMENTS; i++) {
@@ -270,12 +269,25 @@ export default function GraphCanvas3D({
     skirtGeo.setIndex(skirtIdx)
 
     const skirtMat = new THREE.MeshBasicMaterial({
-      color: 0x2563eb, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+      color: 0x2563eb, transparent: true, opacity: 0.16, side: THREE.DoubleSide
     })
     const skirtMesh = new THREE.Mesh(skirtGeo, skirtMat)
     scene.add(skirtMesh)
     skirtMeshRef.current = skirtMesh
     skirtPosRef.current = skirtBufAttr
+
+    // ── Base Floor Quad (at y=0) ──────────────────────────────────────
+    const floorGeo = new THREE.PlaneGeometry(1, 1, 1, 1)
+    floorGeo.rotateX(-Math.PI / 2)
+    const floorPosAttr = floorGeo.getAttribute('position')
+    floorPosAttr.setUsage(THREE.DynamicDrawUsage)
+    floorPosRef.current = floorPosAttr
+    const floorMat = new THREE.MeshBasicMaterial({
+      color: 0x2563eb, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+    })
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat)
+    scene.add(floorMesh)
+    floorMeshRef.current = floorMesh
 
     // ── Hover point marker ─────────────────────────────────────────────
     const hoverSphereGeo = new THREE.SphereGeometry(0.12, 16, 16)
@@ -421,9 +433,7 @@ export default function GraphCanvas3D({
       const c = themeColors()
       sceneRef.current.background = new THREE.Color(c.bg)
       if (wireMeshRef.current) wireMeshRef.current.material.color.set(isDark() ? 0x3c3a36 : 0xd0cdc6)
-      if (gridRef.current) {
-        gridRef.current.material.color?.set(c.grid)
-      }
+      if (gridRef.current) gridRef.current.material.color?.set(c.grid)
       axisGroupRef.current.forEach(obj => {
         if (obj.material) obj.material.color?.set(c.axis)
       })
@@ -433,7 +443,21 @@ export default function GraphCanvas3D({
     return () => obs.disconnect()
   }, [])
 
-  // ── Update surface Z + vertex colours + skirt ──────────────────────────
+  // ── Visibility Toggles ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (skirtMeshRef.current) skirtMeshRef.current.visible = showVolume
+    if (floorMeshRef.current) floorMeshRef.current.visible = showVolume
+  }, [showVolume])
+
+  useEffect(() => {
+    if (gridRef.current) gridRef.current.visible = showGrid
+  }, [showGrid])
+
+  useEffect(() => {
+    if (wireMeshRef.current) wireMeshRef.current.visible = showWireframe
+  }, [showWireframe])
+
+  // ── Update surface Z + vertex positions/colours + skirt + floor ────────
   useEffect(() => {
     if (!posAttrRef.current || !colAttrRef.current) return
 
@@ -443,19 +467,40 @@ export default function GraphCanvas3D({
     const n = (SEGMENTS + 1) ** 2
 
     let zMin = Infinity, zMax = -Infinity
+    let sumZ = 0
     for (let i = 0; i < n; i++) {
       const z = zVals[i]
-      if (isFinite(z)) { zMin = Math.min(zMin, z); zMax = Math.max(zMax, z) }
+      if (isFinite(z)) {
+        zMin = Math.min(zMin, z)
+        zMax = Math.max(zMax, z)
+        sumZ += z
+      }
     }
     const zRange = zMax - zMin || 1
+    const xStep = (xMax - xMin) / SEGMENTS
+    const yStep = (yMax - yMin) / SEGMENTS
+    const dA = xStep * yStep
+    const approxVolume = sumZ * dA
+    setVolumeEst(approxVolume)
+    onVolumeCalculated?.({ volume: approxVolume, zMin, zMax })
 
-    for (let idx = 0; idx < n; idx++) {
-      pos[idx * 3 + 1] = zVals[idx]
-      const t = Math.max(0, Math.min(1, (zVals[idx] - zMin) / zRange))
-      const c = heightColor(t)
-      col[idx * 3]     = c.r
-      col[idx * 3 + 1] = c.g
-      col[idx * 3 + 2] = c.b
+    let idx = 0
+    for (let j = 0; j <= SEGMENTS; j++) {
+      const yCoord = yMin + j * yStep
+      for (let i = 0; i <= SEGMENTS; i++) {
+        const xCoord = xMin + i * xStep
+        const z = zVals[idx]
+        pos[idx * 3]     = xCoord
+        pos[idx * 3 + 1] = z
+        pos[idx * 3 + 2] = yCoord
+
+        const t = Math.max(0, Math.min(1, (z - zMin) / zRange))
+        const c = heightColor(t)
+        col[idx * 3]     = c.r
+        col[idx * 3 + 1] = c.g
+        col[idx * 3 + 2] = c.b
+        idx++
+      }
     }
 
     posAttrRef.current.needsUpdate = true
@@ -463,14 +508,9 @@ export default function GraphCanvas3D({
     meshRef.current?.geometry.computeVertexNormals()
 
     // ── Update skirt ────────────────────────────────────────────────────
-    // Skirt: 4 boundary edges of the surface, each vertex paired top (surface) + bottom (y=0)
-    // Edge order: front (z=yMin row), back (z=yMax row), left (x=xMin col), right (x=xMax col)
     if (skirtPosRef.current) {
       const sp = skirtPosRef.current.array
       const S = SEGMENTS + 1
-      const xStep = (xMax - xMin) / SEGMENTS
-      const yStep = (yMax - yMin) / SEGMENTS
-
       let vi = 0
       function setVert(wx, wy, wz) {
         sp[vi * 3]     = wx
@@ -484,37 +524,45 @@ export default function GraphCanvas3D({
         const wx = xMin + i * xStep
         const wz = yMin
         const wy = isFinite(zVals[i]) ? zVals[i] : 0
-        setVert(wx, wy, wz)   // top
-        setVert(wx, 0, wz)    // bottom
+        setVert(wx, wy, wz); setVert(wx, 0, wz)
       }
       // Back edge (yMax row, row=SEGMENTS)
       for (let i = 0; i < S; i++) {
         const wx = xMin + i * xStep
         const wz = yMax
         const wy = isFinite(zVals[SEGMENTS * S + i]) ? zVals[SEGMENTS * S + i] : 0
-        setVert(wx, wy, wz)
-        setVert(wx, 0, wz)
+        setVert(wx, wy, wz); setVert(wx, 0, wz)
       }
       // Left edge (xMin col, col=0)
       for (let j = 0; j < S; j++) {
         const wx = xMin
         const wz = yMin + j * yStep
         const wy = isFinite(zVals[j * S]) ? zVals[j * S] : 0
-        setVert(wx, wy, wz)
-        setVert(wx, 0, wz)
+        setVert(wx, wy, wz); setVert(wx, 0, wz)
       }
       // Right edge (xMax col, col=SEGMENTS)
       for (let j = 0; j < S; j++) {
         const wx = xMax
         const wz = yMin + j * yStep
         const wy = isFinite(zVals[j * S + SEGMENTS]) ? zVals[j * S + SEGMENTS] : 0
-        setVert(wx, wy, wz)
-        setVert(wx, 0, wz)
+        setVert(wx, wy, wz); setVert(wx, 0, wz)
       }
 
       skirtPosRef.current.needsUpdate = true
     }
-  }, [exprStr, extraVars, xMin, xMax, yMin, yMax])
+
+    // ── Update Floor ────────────────────────────────────────────────────
+    if (floorPosRef.current) {
+      const fp = floorPosRef.current.array
+      // PlaneGeometry 1x1 rotated has 4 verts:
+      // (-0.5, 0, -0.5), (0.5, 0, -0.5), (-0.5, 0, 0.5), (0.5, 0, 0.5)
+      fp[0] = xMin; fp[1] = 0; fp[2] = yMin
+      fp[3] = xMax; fp[4] = 0; fp[5] = yMin
+      fp[6] = xMin; fp[7] = 0; fp[8] = yMax
+      fp[9] = xMax; fp[10] = 0; fp[11] = yMax
+      floorPosRef.current.needsUpdate = true
+    }
+  }, [exprStr, extraVars, xMin, xMax, yMin, yMax, onVolumeCalculated])
 
   return (
     <div className={`${styles.wrapper} ${isExpanded ? styles.expanded : ''}`}>
@@ -535,6 +583,11 @@ export default function GraphCanvas3D({
           )}
         </div>
         <div className={styles.toolbarRight}>
+          {showVolume && volumeEst != null && (
+            <span className={styles.volumeBadge} title="Approximate volume under surface (double integral)">
+              ∬ Volume ≈ {volumeEst.toFixed(2)}
+            </span>
+          )}
           {hoverCoord && (
             <span className={styles.coordBadge}>
               <span>x={hoverCoord.x}</span>
