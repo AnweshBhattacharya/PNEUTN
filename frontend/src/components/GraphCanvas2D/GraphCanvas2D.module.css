@@ -4,8 +4,7 @@
   background: var(--surface-base);
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 0;
+  width: 100%;
   overflow: hidden;
 }
 .expanded {
@@ -120,18 +119,27 @@
 /* ── canvas + tick overlay ── */
 .canvasWrap {
   position: relative;
-  flex: 1;
-  min-height: 0;
-  /* Three.js reads clientWidth/clientHeight of this div — it must fill the parent */
+  /* Stable aspect ratio: 4:3 so graph is never ultra-wide */
+  aspect-ratio: 4 / 3;
+  /* Floor so it's always usable */
+  min-height: 320px;
+  max-height: 600px;
+  /* Stay within parent */
+  width: 100%;
   overflow: hidden;
+  flex-shrink: 0;
 }
 .canvas {
-  /* Fill the parent completely — ResizeObserver + renderer.setSize handles the rest */
   width: 100%;
   height: 100%;
   display: block;
   cursor: crosshair;
-  min-height: 200px;
+}
+.expanded .canvasWrap {
+  aspect-ratio: unset;
+  min-height: unset;
+  max-height: unset;
+  flex: 1;
 }
 .expanded .canvas {
   height: calc(100dvh - 48px - 34px - 22px);

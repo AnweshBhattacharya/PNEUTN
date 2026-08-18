@@ -65,7 +65,7 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
 
         lines = [
             f"Step {i+1}: Rule={s['rule']}. Before={s['before_latex']}. After={s['after_latex']}."

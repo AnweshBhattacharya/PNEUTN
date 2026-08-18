@@ -2,7 +2,7 @@
  * GraphCanvas2D — multi-equation 2D renderer.
  *
  * Features (Desmos-inspired):
- * - Multiple coloured curves (up to 6) — already supported via equations[]
+ * - Multiple coloured curves (up to 6) — supported via equations[]
  * - Crosshair cursor that snaps to the nearest curve
  * - Dashed tangent line with angle badge showing slope angle in degrees
  * - Axis-projection lines from hover point to X and Y axes (highlighted)
@@ -12,6 +12,9 @@
  * - Pan (drag) + zoom (scroll/pinch) + reset (double-click)
  * - Expand to fullscreen toggle
  * - Theme-aware colours via MutationObserver
+ * - Derivative overlay curve
+ * - Grid toggle
+ * - Marked point vertical line
  *
  * Architecture: in-place buffer mutation — geometry never rebuilt per frame.
  * See ARCHITECTURE.md §1.
@@ -30,11 +33,12 @@ const CURVE_COLORS_DARK  = [0xe8e6e1, 0x60a5fa, 0xf87171, 0x4ade80, 0xfbbf24, 0x
 
 function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark' }
 function bgColor()    { return isDark() ? 0x111110 : 0xfafaf9 }
-function axColor()    { return isDark() ? 0x57534e : 0xa8a29e }
+function axColor()    { return isDark() ? 0x78716c : 0x57534e }  // bolder axis color
 function gridColor()  { return isDark() ? 0x1e1d1b : 0xeeecea }
 function curveColors(){ return isDark() ? CURVE_COLORS_DARK : CURVE_COLORS_LIGHT }
 function areaColor()  { return isDark() ? 0x60a5fa : 0x2563eb }
 function crossColor() { return isDark() ? 0x57534e : 0xb8b5b0 }
+function derivColor() { return isDark() ? 0xfbbf24 : 0xd97706 }  // derivative overlay color
 
 function fmtTick(n) {
   if (Number.isInteger(n)) return String(n)
@@ -112,7 +116,6 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
 // ── Area shading helpers — in-place mutation (ARCHITECTURE.md §1) ─────────
 
 function _computeAreaVerts(expr1, expr2OrNull, xL, xR) {
-  // Returns a flat Float32Array: 2 vertices per column × (AREA_N+1) columns × 3 floats
   const verts = new Float32Array((AREA_N + 1) * 6)
   const step = (xR - xL) / AREA_N
   for (let i = 0; i <= AREA_N; i++) {
@@ -126,16 +129,10 @@ function _computeAreaVerts(expr1, expr2OrNull, xL, xR) {
   return verts
 }
 
-/**
- * Build or update the area mesh.
- * - If existingMesh is provided: update its position buffer in-place (no allocation).
- * - Otherwise: create a new mesh with DynamicDrawUsage and a stable index array.
- */
 function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
   const verts = _computeAreaVerts(expr1, expr2OrNull, xL, xR)
 
   if (existingMesh) {
-    // In-place update — zero allocations
     const posAttr = existingMesh.geometry.getAttribute('position')
     posAttr.array.set(verts)
     posAttr.needsUpdate = true
@@ -143,7 +140,6 @@ function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
     return existingMesh
   }
 
-  // First creation only
   const geo = new THREE.BufferGeometry()
   const posAttr = new THREE.Float32BufferAttribute(verts, 3)
   posAttr.setUsage(THREE.DynamicDrawUsage)
@@ -160,56 +156,102 @@ function buildAreaMesh(expr1, expr2OrNull, xL, xR, existingMesh = null) {
   return new THREE.Mesh(geo, mat)
 }
 
+// ── Numerical derivative helper ───────────────────────────────────────────
+function makeDerivExpr(expr) {
+  // We approximate f'(x) numerically via a wrapper expression evaluated at x±h
+  return { _isDerivative: true, originalExpr: expr }
+}
+
+function sampleDerivative(expr, xL, xR, n) {
+  const step = (xR - xL) / n
+  const h = 1e-5
+  const pts = []
+  for (let i = 0; i <= n; i++) {
+    const x = xL + i * step
+    const y1 = sample1D(expr, x - h, x - h, 1)[0]?.y
+    const y2 = sample1D(expr, x + h, x + h, 1)[0]?.y
+    if (y1 != null && y2 != null && isFinite(y1) && isFinite(y2)) {
+      pts.push({ x, y: (y2 - y1) / (2 * h) })
+    }
+  }
+  return pts
+}
+
+const DEFAULT_X_MIN = -6
+const DEFAULT_X_MAX = 6
+
 export default function GraphCanvas2D({
   equations = [],
   overlayRectangles = [],
   showArea = false,
   areaValue = null,
   regionVertices = null,
+  // New props
+  showTangent = true,
+  showDerivative = false,
+  showGrid = true,
+  markedX = null,
+  xRangeMin = null,
+  xRangeMax = null,
 }) {
   const mountRef        = useRef(null)
   const sceneRef        = useRef(null)
   const cameraRef       = useRef(null)
   const rendererRef     = useRef(null)
   const curveLinesRef   = useRef([])
+  const derivLinesRef   = useRef([])   // derivative overlay lines, one per equation
   const tangentRef      = useRef(null)
   const slopePointRef   = useRef(null)
   const crossHRef       = useRef(null)
   const crossVRef       = useRef(null)
   const xDotRef         = useRef(null)
   const yDotRef         = useRef(null)
-  const rectMeshRef     = useRef([])   // array of { fill, edges } — stable pool
+  const markedXLineRef  = useRef(null) // vertical line at markedX
+  const markedXDotRef   = useRef(null)
+  const rectMeshRef     = useRef([])
   const areaMeshRef     = useRef(null)
   const regionMeshRef   = useRef(null)
   const axisRefs        = useRef([])
   const gridRefs        = useRef([])
-  const animRef         = useRef(null)
-  const animProgressRef = useRef(0)
+  const animRef          = useRef(null)
+  const animProgressRefs = useRef([])
 
   const viewRef      = useRef({ panX: 0, panY: 0, scale: 1 })
   const isDragging   = useRef(false)
   const lastPointer  = useRef({ x: 0, y: 0 })
   const lastPinch    = useRef(null)
-  const xMinProp = -6
-  const xMaxProp = 6
+
+  // Expose showTangent to event handlers via ref
+  const showTangentRef   = useRef(showTangent)
+  const showDerivativeRef = useRef(showDerivative)
+  const showGridRef      = useRef(showGrid)
+  useEffect(() => { showTangentRef.current = showTangent }, [showTangent])
+  useEffect(() => { showDerivativeRef.current = showDerivative }, [showDerivative])
+  useEffect(() => { showGridRef.current = showGrid }, [showGrid])
 
   const [hoverInfo,  setHoverInfo]  = useState(null)
   const [isExpanded, setIsExpanded] = useState(false)
   const [viewBounds, setViewBounds] = useState(null)
-  const [canvasSize, setCanvasSize] = useState({ w: 600, h: 380 })
+  const [canvasSize, setCanvasSize] = useState({ w: 600, h: 400 })
+
+  // Respect custom x-range if provided
+  const xMin = xRangeMin ?? DEFAULT_X_MIN
+  const xMax = xRangeMax ?? DEFAULT_X_MAX
 
   const getViewBounds = useCallback(() => {
     const mount = mountRef.current
-    if (!mount) return [xMinProp, xMaxProp, -4, 4]
+    if (!mount) return [xMin, xMax, -4, 4]
     const W = mount.clientWidth || 600
-    const H = mount.clientHeight || 380
+    const H = mount.clientHeight || 400
     const aspect = W / H
     const { panX, panY, scale } = viewRef.current
-    const halfW = ((xMaxProp - xMinProp) / 2) / scale
+    const halfW = ((xMax - xMin) / 2) / scale
     const halfH = halfW / aspect
-    const cx = (xMinProp + xMaxProp) / 2 + panX
+    const cx = (xMin + xMax) / 2 + panX
     return [cx - halfW, cx + halfW, panY - halfH, panY + halfH]
-  }, [])
+  }, [xMin, xMax])
+  const getViewBoundsRef = useRef(null)
+  getViewBoundsRef.current = getViewBounds
 
   const rebuildCamera = useCallback(() => {
     const cam = cameraRef.current; if (!cam) return
@@ -220,7 +262,7 @@ export default function GraphCanvas2D({
   }, [getViewBounds])
 
   const resampleAll = useCallback(() => {
-    const [xL, xR] = getViewBounds()
+    const [xL, xR] = getViewBoundsRef.current()
     curveLinesRef.current.forEach(({ posAttr, expr, line }) => {
       if (!posAttr || !expr) return
       const pts = sample1D(expr, xL, xR, N_POINTS)
@@ -233,7 +275,20 @@ export default function GraphCanvas2D({
       posAttr.needsUpdate = true
       line.geometry.setDrawRange(0, cnt)
     })
-  }, [getViewBounds])
+    // Resample derivative overlays
+    derivLinesRef.current.forEach(({ posAttr, expr, line }) => {
+      if (!posAttr || !expr) return
+      const pts = sampleDerivative(expr, xL, xR, N_POINTS)
+      const arr = posAttr.array
+      const cnt = Math.min(pts.length, N_POINTS)
+      for (let i = 0; i < cnt; i++) {
+        arr[i * 3] = pts[i].x; arr[i * 3 + 1] = pts[i].y; arr[i * 3 + 2] = 0.005
+      }
+      for (let i = cnt; i < N_POINTS; i++) arr[i * 3] = arr[i * 3 + 1] = arr[i * 3 + 2] = 0
+      posAttr.needsUpdate = true
+      line.geometry.setDrawRange(0, cnt)
+    })
+  }, [])
 
   const buildStaticGeo = useCallback(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -241,40 +296,57 @@ export default function GraphCanvas2D({
     gridRefs.current.forEach(o => scene.remove(o))
     axisRefs.current = []; gridRefs.current = []
     const [xL, xR, yB, yT] = getViewBounds()
-    const axMat  = new THREE.LineBasicMaterial({ color: axColor(), linewidth: 3, fog: false })
+
+    // Axes — use a thicker/bolder material
+    const axMat  = new THREE.LineBasicMaterial({ color: axColor(), linewidth: 1, fog: false })
     const grdMat = new THREE.LineBasicMaterial({ color: gridColor() })
-    for (const [p1, p2] of [[[xL,0,0],[xR,0,0]],[[0,yB,0],[0,yT,0]]]) {
-      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1), new THREE.Vector3(...p2)])
-      const l = new THREE.Line(g, axMat); scene.add(l); axisRefs.current.push(l)
-    }
-    const xStep = computeNiceStep(xR - xL)
-    const yStep = computeNiceStep(yT - yB)
-    for (let gx = Math.ceil(xL / xStep) * xStep; gx <= xR; gx += xStep) {
-      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(gx,yB,0),new THREE.Vector3(gx,yT,0)])
-      const l = new THREE.Line(g, grdMat); scene.add(l); gridRefs.current.push(l)
-    }
-    for (let gy = Math.ceil(yB / yStep) * yStep; gy <= yT; gy += yStep) {
-      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xL,gy,0),new THREE.Vector3(xR,gy,0)])
-      const l = new THREE.Line(g, grdMat); scene.add(l); gridRefs.current.push(l)
+
+    // X axis
+    const xAxGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(xL, 0, 0), new THREE.Vector3(xR, 0, 0)
+    ])
+    const xAx = new THREE.Line(xAxGeo, axMat)
+    scene.add(xAx); axisRefs.current.push(xAx)
+
+    // Y axis
+    const yAxGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, yB, 0), new THREE.Vector3(0, yT, 0)
+    ])
+    const yAx = new THREE.Line(yAxGeo, axMat)
+    scene.add(yAx); axisRefs.current.push(yAx)
+
+    if (showGridRef.current) {
+      const xStep = computeNiceStep(xR - xL)
+      const yStep = computeNiceStep(yT - yB)
+      for (let gx = Math.ceil(xL / xStep) * xStep; gx <= xR; gx += xStep) {
+        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(gx, yB, 0), new THREE.Vector3(gx, yT, 0)])
+        const l = new THREE.Line(g, grdMat); scene.add(l); gridRefs.current.push(l)
+      }
+      for (let gy = Math.ceil(yB / yStep) * yStep; gy <= yT; gy += yStep) {
+        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(xL, gy, 0), new THREE.Vector3(xR, gy, 0)])
+        const l = new THREE.Line(g, grdMat); scene.add(l); gridRefs.current.push(l)
+      }
     }
   }, [getViewBounds])
 
   // ── Scene init ──────────────────────────────────────────────────────────
   useEffect(() => {
     const mount = mountRef.current
+
     // Use getBoundingClientRect for accurate size at mount time
     const rect = mount.getBoundingClientRect()
-    const W = rect.width  || mount.clientWidth  || 600
-    const H = rect.height || mount.clientHeight || 400
+    const W = Math.max(rect.width  || mount.clientWidth  || 600, 1)
+    const H = Math.max(rect.height || mount.clientHeight || 400, 1)
     const aspect = W / H
-    const halfW = (xMaxProp - xMinProp) / 2
+    const halfW = (DEFAULT_X_MAX - DEFAULT_X_MIN) / 2
     const halfH = halfW / aspect
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(bgColor())
     sceneRef.current = scene
 
-    const camera = new THREE.OrthographicCamera(xMinProp, xMaxProp, halfH, -halfH, 0.1, 1000)
+    // Camera: correct frustum from actual pixel dimensions
+    const camera = new THREE.OrthographicCamera(DEFAULT_X_MIN, DEFAULT_X_MAX, halfH, -halfH, 0.1, 1000)
     camera.position.z = 10
     cameraRef.current = camera
 
@@ -286,6 +358,7 @@ export default function GraphCanvas2D({
 
     buildStaticGeo()
 
+    // Tangent line
     const tlGeo = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(-20, 0, 0), new THREE.Vector3(20, 0, 0)
     ])
@@ -294,12 +367,14 @@ export default function GraphCanvas2D({
     tl.computeLineDistances(); tl.visible = false
     scene.add(tl); tangentRef.current = tl
 
+    // Slope point
     const spGeo = new THREE.CircleGeometry(0.06, 24)
     const spMat = new THREE.MeshBasicMaterial({ color: 0x2563eb })
     const sp = new THREE.Mesh(spGeo, spMat)
     sp.visible = false; sp.renderOrder = 3
     scene.add(sp); slopePointRef.current = sp
 
+    // Projection lines
     const makeProjectionLine = () => {
       const g = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)
@@ -315,6 +390,7 @@ export default function GraphCanvas2D({
     crossHRef.current = makeProjectionLine()
     crossVRef.current = makeProjectionLine()
 
+    // Axis dots
     const dotGeo = new THREE.CircleGeometry(0.05, 16)
     const dotMat = new THREE.MeshBasicMaterial({ color: crossColor() })
     const xDot = new THREE.Mesh(dotGeo, dotMat.clone())
@@ -323,6 +399,22 @@ export default function GraphCanvas2D({
     xDot.renderOrder = 2; yDot.renderOrder = 2
     scene.add(xDot); scene.add(yDot)
     xDotRef.current = xDot; yDotRef.current = yDot
+
+    // Marked X vertical line
+    const mxGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, -20, 0), new THREE.Vector3(0, 20, 0)
+    ])
+    const mxMat = new THREE.LineDashedMaterial({
+      color: 0xdc2626, dashSize: 0.15, gapSize: 0.1, transparent: true, opacity: 0.8
+    })
+    const mxLine = new THREE.Line(mxGeo, mxMat)
+    mxLine.computeLineDistances(); mxLine.visible = false
+    scene.add(mxLine); markedXLineRef.current = mxLine
+
+    const mxDotGeo = new THREE.CircleGeometry(0.07, 20)
+    const mxDot = new THREE.Mesh(mxDotGeo, new THREE.MeshBasicMaterial({ color: 0xdc2626 }))
+    mxDot.visible = false; mxDot.renderOrder = 4
+    scene.add(mxDot); markedXDotRef.current = mxDot
 
     const el = renderer.domElement
 
@@ -366,7 +458,6 @@ export default function GraphCanvas2D({
       const curves = curveLinesRef.current
       if (!curves.length) { setHoverInfo(null); return }
 
-      // F6: find nearest curve to mouse world-y position, not always curve 0
       let bestExpr = null
       let bestDist  = Infinity
       curves.forEach(({ expr }) => {
@@ -388,16 +479,20 @@ export default function GraphCanvas2D({
       const slope = (p1s[0] && p2s[0]) ? (p2s[0].y - p1s[0].y) / (2 * dx2) : 0
       const angleDeg = (Math.atan(slope) * 180 / Math.PI)
 
-      const extend = (getViewBounds()[1] - getViewBounds()[0]) * 0.35
-      const x0t = midPt.x - extend; const x1t = midPt.x + extend
-      const y0t = midPt.y + slope * (x0t - midPt.x)
-      const y1t = midPt.y + slope * (x1t - midPt.x)
-      const tlPos = tl.geometry.getAttribute('position')
-      tlPos.setXYZ(0, x0t, y0t, 0.03); tlPos.setXYZ(1, x1t, y1t, 0.03)
-      tlPos.needsUpdate = true; tl.computeLineDistances(); tl.visible = true
-      sp.position.set(midPt.x, midPt.y, 0.04); sp.visible = true
+      if (showTangentRef.current) {
+        const extend = (getViewBounds()[1] - getViewBounds()[0]) * 0.35
+        const x0t = midPt.x - extend; const x1t = midPt.x + extend
+        const y0t = midPt.y + slope * (x0t - midPt.x)
+        const y1t = midPt.y + slope * (x1t - midPt.x)
+        const tlPos = tl.geometry.getAttribute('position')
+        tlPos.setXYZ(0, x0t, y0t, 0.03); tlPos.setXYZ(1, x1t, y1t, 0.03)
+        tlPos.needsUpdate = true; tl.computeLineDistances(); tl.visible = true
+        sp.position.set(midPt.x, midPt.y, 0.04); sp.visible = true
+      } else {
+        tl.visible = false; sp.visible = false
+      }
 
-      const [xL, xR, yB, yT] = getViewBounds()
+      const [xL, , yB] = getViewBounds()
       const ch = crossHRef.current
       const cv = crossVRef.current
       const chPos = ch.geometry.getAttribute('position')
@@ -473,27 +568,28 @@ export default function GraphCanvas2D({
     }, { passive: true })
     el.addEventListener('touchend', () => { isDragging.current = false; lastPinch.current = null })
 
-    animProgressRef.current = 0
+    animProgressRefs.current = [0]
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
-      if (animProgressRef.current < 1) {
-        animProgressRef.current = Math.min(1, animProgressRef.current + 0.03)
-        const p = animProgressRef.current
-        curveLinesRef.current.forEach(({ line }) => {
-          if (line) line.geometry.setDrawRange(0, Math.round(p * N_POINTS))
-        })
-      }
+      curveLinesRef.current.forEach(({ line }, i) => {
+        const p = animProgressRefs.current[i] ?? 1
+        if (p < 1) {
+          animProgressRefs.current[i] = Math.min(1, p + 0.03)
+          line.geometry.setDrawRange(0, Math.round(animProgressRefs.current[i] * N_POINTS))
+        }
+      })
       renderer.render(scene, camera)
     }
     animate()
 
     const ro = new ResizeObserver(() => {
-      const nW = mount.clientWidth  || mount.getBoundingClientRect().width  || 600
-      const nH = mount.clientHeight || mount.getBoundingClientRect().height || 400
+      const nW = Math.max(mount.clientWidth  || mount.getBoundingClientRect().width  || 600, 1)
+      const nH = Math.max(mount.clientHeight || mount.getBoundingClientRect().height || 400, 1)
       if (nW > 0 && nH > 0) {
         renderer.setSize(nW, nH)
         rebuildCamera()
         resampleAll()
+        buildStaticGeo()
         setCanvasSize({ w: nW, h: nH })
       }
     })
@@ -515,6 +611,9 @@ export default function GraphCanvas2D({
       curveLinesRef.current.forEach(({ line }, i) => {
         if (line) line.material.color.set(cc[i % cc.length])
       })
+      derivLinesRef.current.forEach(({ line }) => {
+        if (line) line.material.color.set(derivColor())
+      })
       axisRefs.current.forEach(l => l.material.color.set(axColor()))
       gridRefs.current.forEach(l => l.material.color.set(gridColor()))
       if (areaMeshRef.current) areaMeshRef.current.material.color.set(areaColor())
@@ -528,6 +627,11 @@ export default function GraphCanvas2D({
     return () => obs.disconnect()
   }, [])
 
+  // ── Grid toggle effect ───────────────────────────────────────────────────
+  useEffect(() => {
+    buildStaticGeo()
+  }, [showGrid, buildStaticGeo])
+
   // ── Sync equations → Three.js lines ────────────────────────────────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -538,6 +642,10 @@ export default function GraphCanvas2D({
       const { line } = curveLinesRef.current.pop()
       scene.remove(line)
     }
+    while (derivLinesRef.current.length > equations.length) {
+      const { line } = derivLinesRef.current.pop()
+      scene.remove(line)
+    }
 
     equations.forEach((eq, i) => {
       if (i < existingCount && curveLinesRef.current[i]) {
@@ -546,20 +654,38 @@ export default function GraphCanvas2D({
       } else {
         const positions = new Float32Array(N_POINTS * 3)
         const geo = new THREE.BufferGeometry()
-        const posAttr = new THREE.BufferAttribute(positions, 3)
+        const posAttr = new THREE.Float32BufferAttribute(positions, 3)
         posAttr.setUsage(THREE.DynamicDrawUsage)
         geo.setAttribute('position', posAttr)
         const mat = new THREE.LineBasicMaterial({ color: cc[i % cc.length], linewidth: 2 })
         const line = new THREE.Line(geo, mat)
         scene.add(line)
         curveLinesRef.current[i] = { line, posAttr, expr: eq.expr }
+        animProgressRefs.current[i] = 0
+      }
+
+      // Derivative overlay line
+      if (i < derivLinesRef.current.length && derivLinesRef.current[i]) {
+        derivLinesRef.current[i].expr = eq.expr
+        derivLinesRef.current[i].line.visible = showDerivative
+      } else {
+        const positions = new Float32Array(N_POINTS * 3)
+        const geo = new THREE.BufferGeometry()
+        const posAttr = new THREE.Float32BufferAttribute(positions, 3)
+        posAttr.setUsage(THREE.DynamicDrawUsage)
+        geo.setAttribute('position', posAttr)
+        const mat = new THREE.LineDashedMaterial({
+          color: derivColor(), linewidth: 1.5, dashSize: 0.15, gapSize: 0.08, transparent: true, opacity: 0.75
+        })
+        const line = new THREE.Line(geo, mat)
+        line.visible = showDerivative
+        scene.add(line)
+        derivLinesRef.current[i] = { line, posAttr, expr: eq.expr }
       }
     })
 
-    animProgressRef.current = 0
     resampleAll()
 
-    // F3: Area mesh — in-place update when possible (ARCHITECTURE.md §1)
     if (!showArea || equations.length < 1) {
       if (areaMeshRef.current) {
         scene.remove(areaMeshRef.current)
@@ -578,15 +704,47 @@ export default function GraphCanvas2D({
         areaMeshRef.current = am
       }
     }
-  }, [equations, showArea, resampleAll, getViewBounds])
+  }, [equations, showArea, resampleAll, getViewBounds, showDerivative])
+
+  // ── Show/hide derivative overlays when toggle changes ───────────────────
+  useEffect(() => {
+    derivLinesRef.current.forEach(({ line }) => {
+      if (line) line.visible = showDerivative
+    })
+    if (showDerivative) resampleAll()
+  }, [showDerivative, resampleAll])
+
+  // ── Marked X vertical line ───────────────────────────────────────────────
+  useEffect(() => {
+    const mxLine = markedXLineRef.current
+    const mxDot  = markedXDotRef.current
+    if (!mxLine || !mxDot) return
+
+    if (markedX == null) {
+      mxLine.visible = false; mxDot.visible = false; return
+    }
+
+    // Position vertical line at markedX
+    const pos = mxLine.geometry.getAttribute('position')
+    pos.setXYZ(0, markedX, -50, 0.01); pos.setXYZ(1, markedX, 50, 0.01)
+    pos.needsUpdate = true; mxLine.computeLineDistances(); mxLine.visible = true
+
+    // Place dot on the first curve at markedX
+    const firstExpr = curveLinesRef.current[0]?.expr
+    if (firstExpr) {
+      const [pt] = sample1D(firstExpr, markedX, markedX, 1)
+      if (pt) {
+        mxDot.position.set(markedX, pt.y, 0.05); mxDot.visible = true
+      }
+    }
+  }, [markedX])
 
   // ── Riemann rectangles — in-place pool (ARCHITECTURE.md §1, F2) ─────────
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
     const rects = overlayRectangles
-    const pool  = rectMeshRef.current  // array of { fill, edges }
+    const pool  = rectMeshRef.current
 
-    // Grow pool only when needed — one-time allocation per new slot
     while (pool.length < rects.length) {
       const geo  = new THREE.PlaneGeometry(1, 1)
       const posArr = geo.getAttribute('position')
@@ -602,7 +760,6 @@ export default function GraphCanvas2D({
       pool.push({ fill, edges })
     }
 
-    // Mutate position/scale in-place for all active rects
     rects.forEach(({ x0, x1, height }, i) => {
       const w = x1 - x0; const h = Math.abs(height)
       const cx = x0 + w / 2; const cy = height / 2
@@ -611,7 +768,6 @@ export default function GraphCanvas2D({
       edges.scale.set(w, h, 1);  edges.position.set(cx, cy, 0.05); edges.visible = true
     })
 
-    // Hide excess pool entries — no removal, no allocation
     for (let i = rects.length; i < pool.length; i++) {
       pool[i].fill.visible  = false
       pool[i].edges.visible = false
@@ -660,9 +816,14 @@ export default function GraphCanvas2D({
               </span>
             )
           })}
+          {showDerivative && equations.length > 0 && (
+            <span className={styles.legendItem}>
+              <span className={styles.legendDot} style={{ background: '#d97706', borderRadius: 0, width: 14, height: 2, marginRight: 2 }} />
+              <span className={styles.legendExpr}>f′(x)</span>
+            </span>
+          )}
         </div>
         <div className={styles.toolbarRight}>
-          {/* F10: render areaValue in the badge when provided */}
           {showArea && (
             <span className={styles.areaBadge} title="Area shading enabled">
               {areaValue != null ? `∫ Area = ${areaValue.toFixed(3)}` : '∫ Area'}

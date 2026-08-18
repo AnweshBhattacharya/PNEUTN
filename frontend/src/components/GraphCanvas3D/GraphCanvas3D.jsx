@@ -1,15 +1,17 @@
 /**
  * GraphCanvas3D — Three.js 3D surface renderer.
  *
- * Features (matching 2D parity):
- * - Slow auto-rotation demonstration (pauses on interaction)
+ * Features:
+ * - Slow auto-rotation (pauses on interaction)
  * - Colour-gradient surface (height-mapped: blue→green→red)
  * - Raycaster hover with (x, y, z) coordinate display
- * - Axis labels (X, Y, Z)
+ * - Bold cylinder axes with +X/+Y/+Z and −X/−Y/−Z labels
+ * - 3D grid background (GridHelper on XZ plane)
+ * - Area under curve: semi-transparent skirt from surface boundary to base
  * - Pan/orbit drag, scroll zoom, pinch zoom, double-click reset
  * - Expand to fullscreen
  * - Theme-aware via MutationObserver
- * - Z updated in-place on expression change
+ * - Z updated in-place on expression change (ARCHITECTURE.md §1)
  */
 import React, { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -18,21 +20,20 @@ import styles from './GraphCanvas3D.module.css'
 
 const SEGMENTS = 50
 const DEFAULT_ROT = { phi: Math.PI / 5, theta: Math.PI / 7, radius: 13 }
-const AUTO_ROT_SPEED = 0.003  // radians per frame
+const AUTO_ROT_SPEED = 0.003
 
 function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark' }
 function themeColors() {
   const dark = isDark()
   return {
     bg:   dark ? 0x111110 : 0xfafaf9,
-    axis: dark ? 0x57534e : 0xa8a29e,
+    axis: dark ? 0xa8a29e : 0x57534e,
     grid: dark ? 0x2c2b28 : 0xe4e1dc,
   }
 }
 
 /** Map a height value (normalised 0-1) to a RGB color (cool-to-warm). */
 function heightColor(t) {
-  // Blue (0,0,1) → Cyan (0,1,1) → Green (0,1,0) → Yellow (1,1,0) → Red (1,0,0)
   const stops = [
     [0.0,  0,   0,   1],
     [0.25, 0,   1,   1],
@@ -51,6 +52,44 @@ function heightColor(t) {
   return new THREE.Color(1, 0, 0)
 }
 
+/**
+ * Create a bold axis using a thin CylinderGeometry + MeshBasicMaterial.
+ * Three.js WebGL2 ignores linewidth>1 on Line objects; cylinders render with real thickness.
+ */
+function makeBoldAxis(from, to, color) {
+  const dir = new THREE.Vector3().subVectors(to, from)
+  const len = dir.length()
+  const geo = new THREE.CylinderGeometry(0.04, 0.04, len, 8)
+  const mat = new THREE.MeshBasicMaterial({ color })
+  const mesh = new THREE.Mesh(geo, mat)
+  // Default cylinder is along Y — position/orient to align with axis direction
+  const mid = new THREE.Vector3().addVectors(from, to).multiplyScalar(0.5)
+  mesh.position.copy(mid)
+  // Align cylinder Y-axis to direction
+  const axis = new THREE.Vector3(0, 1, 0)
+  mesh.quaternion.setFromUnitVectors(axis, dir.normalize())
+  return mesh
+}
+
+/** Axis label sprite using canvas texture. */
+function makeLabel(scene, text, position, dark) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128; canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = dark ? '#d4d0cc' : '#1a1917'
+  ctx.font = 'bold 58px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, 64, 64)
+  const tex = new THREE.CanvasTexture(canvas)
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true })
+  const sprite = new THREE.Sprite(mat)
+  sprite.scale.set(0.85, 0.85, 1)
+  sprite.position.set(...position)
+  scene.add(sprite)
+  return sprite
+}
+
 export default function GraphCanvas3D({
   exprStr = 'sin(x) * cos(y)',
   xMin = -4, xMax = 4,
@@ -63,9 +102,13 @@ export default function GraphCanvas3D({
   const rendererRef  = useRef(null)
   const meshRef      = useRef(null)
   const wireMeshRef  = useRef(null)
+  const skirtMeshRef = useRef(null)   // area-under-surface skirt
   const posAttrRef   = useRef(null)
   const colAttrRef   = useRef(null)
+  const skirtPosRef  = useRef(null)
   const hoverMarkerRef = useRef(null)
+  const axisGroupRef = useRef([])     // axis cylinders + labels for theme sync
+  const gridRef      = useRef(null)
   const animRef      = useRef(null)
   const rotRef       = useRef({ ...DEFAULT_ROT })
   const autoRotateRef= useRef(true)
@@ -79,15 +122,16 @@ export default function GraphCanvas3D({
   const [isExpanded, setIsExpanded] = useState(false)
   const [autoRotate, setAutoRotate] = useState(true)
 
-  // Keep autoRotateRef in sync with state so animate loop always reads current value
   useEffect(() => { autoRotateRef.current = autoRotate }, [autoRotate])
 
   useEffect(() => {
     const mount = mountRef.current
-    const el = mount // Assign mount to el for event listeners
-    const W = mount.clientWidth || 600
-    const H = mount.clientHeight || 380
+    const el = mount
+    const rect = mount.getBoundingClientRect()
+    const W = Math.max(rect.width  || mount.clientWidth  || 600, 1)
+    const H = Math.max(rect.height || mount.clientHeight || 380, 1)
     const c = themeColors()
+    const dark = isDark()
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(c.bg)
@@ -102,51 +146,72 @@ export default function GraphCanvas3D({
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // ── Lights ──────────────────────────────────────────────────────
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    // ── Lights ────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7))
     const dir1 = new THREE.DirectionalLight(0xffffff, 0.8)
     dir1.position.set(8, 12, 8); scene.add(dir1)
     const dir2 = new THREE.DirectionalLight(0xffffff, 0.3)
     dir2.position.set(-8, -4, -8); scene.add(dir2)
 
-    // ── Axes with labels ─────────────────────────────────────────────
-    // Make axes thicker and more visible
-    const axMat = new THREE.LineBasicMaterial({ color: c.axis, linewidth: 2 })
-    const grdMat = new THREE.LineBasicMaterial({ color: c.grid })
+    // ── Bold Axes (CylinderGeometry) ──────────────────────────────────
     const axLen = 5.5
-    for (const [p1, p2] of [
-      [[-axLen,0,0],[axLen,0,0]],
-      [[0,-axLen,0],[0,axLen,0]],
-      [[0,0,-axLen],[0,0,axLen]],
-    ]) {
-      scene.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1), new THREE.Vector3(...p2)]),
-        axMat
-      ))
+    const axisColor = c.axis
+
+    const axObjs = []
+    // X axis (+/-)
+    const xPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(axLen,0,0), axisColor)
+    const xNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(-axLen,0,0), axisColor)
+    // Y axis (+/-)
+    const yPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,axLen,0), axisColor)
+    const yNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,-axLen,0), axisColor)
+    // Z axis (+/-) — in Three.js Z is depth but for math surface Y is up, Z is the "y" math axis
+    const zPos = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,axLen), axisColor)
+    const zNeg = makeBoldAxis(new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-axLen), axisColor)
+
+    for (const ax of [xPos, xNeg, yPos, yNeg, zPos, zNeg]) {
+      scene.add(ax); axObjs.push(ax)
     }
 
-    // Axis label sprites - make text bolder and larger
-    function makeLabel(text, position) {
-      const canvas = document.createElement('canvas')
-      canvas.width = 128; canvas.height = 128
-      const ctx = canvas.getContext('2d')
-      ctx.fillStyle = isDark() ? '#e3e3e3' : '#1a1a1a'
-      ctx.font = 'bold 60px monospace'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(text, 64, 64)
-      const tex = new THREE.CanvasTexture(canvas)
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true })
-      const sprite = new THREE.Sprite(mat)
-      sprite.scale.set(0.8, 0.8, 1)
-      sprite.position.set(...position)
-      scene.add(sprite)
+    // Arrow cones at positive ends
+    function makeCone(position, direction, color) {
+      const coneGeo = new THREE.ConeGeometry(0.10, 0.35, 8)
+      const coneMat = new THREE.MeshBasicMaterial({ color })
+      const cone = new THREE.Mesh(coneGeo, coneMat)
+      cone.position.copy(position)
+      const up = new THREE.Vector3(0, 1, 0)
+      cone.quaternion.setFromUnitVectors(up, direction.normalize())
+      scene.add(cone); axObjs.push(cone)
     }
-    makeLabel('X', [axLen + 0.4, 0, 0])
-    makeLabel('Y', [0, axLen + 0.4, 0])
-    makeLabel('Z', [0, 0, axLen + 0.4])
+    makeCone(new THREE.Vector3(axLen + 0.18, 0, 0), new THREE.Vector3(1, 0, 0), axisColor)
+    makeCone(new THREE.Vector3(0, axLen + 0.18, 0), new THREE.Vector3(0, 1, 0), axisColor)
+    makeCone(new THREE.Vector3(0, 0, axLen + 0.18), new THREE.Vector3(0, 0, 1), axisColor)
 
-    // ── Surface ──────────────────────────────────────────────────────
+    axisGroupRef.current = axObjs
+
+    // Labels: +X, +Y, +Z and -X, -Y, -Z
+    const labelObjs = []
+    const labelData = [
+      ['X',  [axLen + 0.7,  0.15, 0]],
+      ['Y',  [0.15,  axLen + 0.7, 0]],
+      ['Z',  [0, 0.15, axLen + 0.7]],
+      ['−X', [-axLen - 0.7, 0.15, 0]],
+      ['−Y', [0.15, -axLen - 0.7, 0]],
+      ['−Z', [0, 0.15, -axLen - 0.7]],
+    ]
+    for (const [text, pos] of labelData) {
+      const s = makeLabel(scene, text, pos, dark)
+      labelObjs.push(s)
+    }
+
+    // ── Grid Helper (XZ plane) ────────────────────────────────────────
+    const gridHelper = new THREE.GridHelper(10, 10, c.grid, c.grid)
+    gridHelper.position.y = 0
+    gridHelper.material.opacity = 0.4
+    gridHelper.material.transparent = true
+    scene.add(gridHelper)
+    gridRef.current = gridHelper
+
+    // ── Surface ───────────────────────────────────────────────────────
     const geo = new THREE.PlaneGeometry(xMax - xMin, yMax - yMin, SEGMENTS, SEGMENTS)
     geo.rotateX(-Math.PI / 2)
 
@@ -154,7 +219,6 @@ export default function GraphCanvas3D({
     posAttr.setUsage(THREE.DynamicDrawUsage)
     posAttrRef.current = posAttr
 
-    // Vertex colours
     const n = (SEGMENTS + 1) ** 2
     const colors = new Float32Array(n * 3)
     const colAttr = new THREE.BufferAttribute(colors, 3)
@@ -173,13 +237,47 @@ export default function GraphCanvas3D({
 
     // Subtle wireframe overlay
     const wireMat = new THREE.MeshBasicMaterial({
-      color: isDark() ? 0x3c3a36 : 0xd0cdc6,
+      color: dark ? 0x3c3a36 : 0xd0cdc6,
       wireframe: true, transparent: true, opacity: 0.08,
     })
     const wireMesh = new THREE.Mesh(geo, wireMat)
     scene.add(wireMesh); wireMeshRef.current = wireMesh
 
-    // ── Hover point marker ───────────────────────────────────────────
+    // ── Area under surface skirt ──────────────────────────────────────
+    // The skirt connects the surface boundary rows to y=0
+    // Uses SEGMENTS+1 vertices per boundary edge × 4 sides
+    const skirtVertCount = (SEGMENTS + 1) * 4 * 2  // 4 edges, 2 verts each (top+bottom)
+    const skirtPos = new Float32Array(skirtVertCount * 3)
+    const skirtBufAttr = new THREE.BufferAttribute(skirtPos, 3)
+    skirtBufAttr.setUsage(THREE.DynamicDrawUsage)
+    const skirtGeo = new THREE.BufferGeometry()
+    skirtGeo.setAttribute('position', skirtBufAttr)
+
+    // Build stable index for skirt triangles
+    const skirtIdx = []
+    const edgeN = SEGMENTS + 1
+    // 4 edges × SEGMENTS quads each
+    for (let edge = 0; edge < 4; edge++) {
+      const baseV = edge * edgeN * 2
+      for (let i = 0; i < SEGMENTS; i++) {
+        const a = baseV + i * 2
+        const b = a + 1
+        const c = a + 2
+        const d = a + 3
+        skirtIdx.push(a, b, c, b, d, c)
+      }
+    }
+    skirtGeo.setIndex(skirtIdx)
+
+    const skirtMat = new THREE.MeshBasicMaterial({
+      color: 0x2563eb, transparent: true, opacity: 0.12, side: THREE.DoubleSide
+    })
+    const skirtMesh = new THREE.Mesh(skirtGeo, skirtMat)
+    scene.add(skirtMesh)
+    skirtMeshRef.current = skirtMesh
+    skirtPosRef.current = skirtBufAttr
+
+    // ── Hover point marker ─────────────────────────────────────────────
     const hoverSphereGeo = new THREE.SphereGeometry(0.12, 16, 16)
     const hoverSphereMat = new THREE.MeshStandardMaterial({
       color: 0x2563eb,
@@ -218,7 +316,6 @@ export default function GraphCanvas3D({
         lastPtr.current = { x: e.clientX, y: e.clientY }
         return
       }
-      // Raycaster hover
       const rect = el.getBoundingClientRect()
       const mouse = new THREE.Vector2(
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
@@ -230,7 +327,6 @@ export default function GraphCanvas3D({
       if (hits.length) {
         const p = hits[0].point
         setHoverCoord({ x: p.x.toFixed(2), y: p.z.toFixed(2), z: p.y.toFixed(2) })
-        // Position hover marker sphere at the hit point
         if (hoverMarkerRef.current) {
           hoverMarkerRef.current.position.copy(p)
           hoverMarkerRef.current.visible = true
@@ -254,7 +350,6 @@ export default function GraphCanvas3D({
       pauseAutoRotate()
     })
 
-    // Touch
     el.addEventListener('touchstart', e => {
       if (e.touches.length === 1) {
         isDragging.current = true
@@ -285,10 +380,8 @@ export default function GraphCanvas3D({
     }, { passive: true })
     el.addEventListener('touchend', () => { isDragging.current = false; lastPinch.current = null })
 
-    // ── Animate ──────────────────────────────────────────────────────
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
-      // Auto-rotate when not interacting (respects autoRotateRef so state changes take effect)
       if (autoRotateRef.current && !isInteracting.current && !isDragging.current) {
         rotRef.current.phi += AUTO_ROT_SPEED
       }
@@ -304,7 +397,8 @@ export default function GraphCanvas3D({
     animate()
 
     const ro = new ResizeObserver(() => {
-      const nW = mount.clientWidth; const nH = mount.clientHeight
+      const nW = Math.max(mount.clientWidth || 1, 1)
+      const nH = Math.max(mount.clientHeight || 1, 1)
       renderer.setSize(nW, nH)
       camera.aspect = nW / nH
       camera.updateProjectionMatrix()
@@ -327,13 +421,19 @@ export default function GraphCanvas3D({
       const c = themeColors()
       sceneRef.current.background = new THREE.Color(c.bg)
       if (wireMeshRef.current) wireMeshRef.current.material.color.set(isDark() ? 0x3c3a36 : 0xd0cdc6)
+      if (gridRef.current) {
+        gridRef.current.material.color?.set(c.grid)
+      }
+      axisGroupRef.current.forEach(obj => {
+        if (obj.material) obj.material.color?.set(c.axis)
+      })
     }
     const obs = new MutationObserver(apply)
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => obs.disconnect()
   }, [])
 
-  // ── Update surface Z + vertex colours ──────────────────────────────────
+  // ── Update surface Z + vertex colours + skirt ──────────────────────────
   useEffect(() => {
     if (!posAttrRef.current || !colAttrRef.current) return
 
@@ -342,7 +442,6 @@ export default function GraphCanvas3D({
     const col = colAttrRef.current.array
     const n = (SEGMENTS + 1) ** 2
 
-    // Find z range for colour normalisation
     let zMin = Infinity, zMax = -Infinity
     for (let i = 0; i < n; i++) {
       const z = zVals[i]
@@ -362,6 +461,59 @@ export default function GraphCanvas3D({
     posAttrRef.current.needsUpdate = true
     colAttrRef.current.needsUpdate = true
     meshRef.current?.geometry.computeVertexNormals()
+
+    // ── Update skirt ────────────────────────────────────────────────────
+    // Skirt: 4 boundary edges of the surface, each vertex paired top (surface) + bottom (y=0)
+    // Edge order: front (z=yMin row), back (z=yMax row), left (x=xMin col), right (x=xMax col)
+    if (skirtPosRef.current) {
+      const sp = skirtPosRef.current.array
+      const S = SEGMENTS + 1
+      const xStep = (xMax - xMin) / SEGMENTS
+      const yStep = (yMax - yMin) / SEGMENTS
+
+      let vi = 0
+      function setVert(wx, wy, wz) {
+        sp[vi * 3]     = wx
+        sp[vi * 3 + 1] = wy
+        sp[vi * 3 + 2] = wz
+        vi++
+      }
+
+      // Front edge (yMin row, row=0)
+      for (let i = 0; i < S; i++) {
+        const wx = xMin + i * xStep
+        const wz = yMin
+        const wy = isFinite(zVals[i]) ? zVals[i] : 0
+        setVert(wx, wy, wz)   // top
+        setVert(wx, 0, wz)    // bottom
+      }
+      // Back edge (yMax row, row=SEGMENTS)
+      for (let i = 0; i < S; i++) {
+        const wx = xMin + i * xStep
+        const wz = yMax
+        const wy = isFinite(zVals[SEGMENTS * S + i]) ? zVals[SEGMENTS * S + i] : 0
+        setVert(wx, wy, wz)
+        setVert(wx, 0, wz)
+      }
+      // Left edge (xMin col, col=0)
+      for (let j = 0; j < S; j++) {
+        const wx = xMin
+        const wz = yMin + j * yStep
+        const wy = isFinite(zVals[j * S]) ? zVals[j * S] : 0
+        setVert(wx, wy, wz)
+        setVert(wx, 0, wz)
+      }
+      // Right edge (xMax col, col=SEGMENTS)
+      for (let j = 0; j < S; j++) {
+        const wx = xMax
+        const wz = yMin + j * yStep
+        const wy = isFinite(zVals[j * S + SEGMENTS]) ? zVals[j * S + SEGMENTS] : 0
+        setVert(wx, wy, wz)
+        setVert(wx, 0, wz)
+      }
+
+      skirtPosRef.current.needsUpdate = true
+    }
   }, [exprStr, extraVars, xMin, xMax, yMin, yMax])
 
   return (
@@ -385,7 +537,9 @@ export default function GraphCanvas3D({
         <div className={styles.toolbarRight}>
           {hoverCoord && (
             <span className={styles.coordBadge}>
-              x={hoverCoord.x} y={hoverCoord.y} z={hoverCoord.z}
+              <span>x={hoverCoord.x}</span>
+              <span>y={hoverCoord.y}</span>
+              <span>z={hoverCoord.z}</span>
             </span>
           )}
           <button className={styles.toolBtn}

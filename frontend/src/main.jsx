@@ -8,6 +8,8 @@ import './styles/tokens.css'
 import 'katex/dist/katex.min.css'
 // 3. KaTeX monospace override (must come AFTER KaTeX base)
 import './styles/katex-override.css'
+// 4. Global root resets
+import './index.css'
 
 import App from './App.jsx'
 

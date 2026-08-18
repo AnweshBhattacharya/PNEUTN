@@ -93,7 +93,7 @@ jobs:
       # Install arm64 manylinux wheels directly — no Docker, no --use-container.
       # --use-container was the root cause of the 1.5-hour job stall: it tries
       # to pull a large Lambda build container image on every run.
-      - name: Build Lambda Layer (sympy + numpy for arm64)
+      - name: Build Lambda Layer (sympy + numpy + google-generativeai for arm64)
         if: steps.changes.outputs.changed == 'true'
         run: |
           mkdir -p backend/layers/sympy-numpy/python
@@ -104,7 +104,7 @@ jobs:
             --python-version 3.11 \
             --only-binary=:all: \
             --upgrade \
-            sympy numpy
+            sympy numpy google-generativeai
 
       - name: SAM build
         if: steps.changes.outputs.changed == 'true'

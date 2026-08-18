@@ -87,6 +87,17 @@ export default function App() {
   const [activeExamplePatch, setActiveExamplePatch] = useState(null)
   const [mobilePanel, setMobilePanel] = useState('input')
 
+  // 2D graph parameter controls
+  const [showTangent,    setShowTangent]    = useState(true)
+  const [showDerivative, setShowDerivative] = useState(false)
+  const [showGrid,       setShowGrid]       = useState(true)
+  const [markedX,        setMarkedX]        = useState(null)
+  const [markedXInput,   setMarkedXInput]   = useState('')
+  const [xRangeMin,      setXRangeMin]      = useState(null)
+  const [xRangeMax,      setXRangeMax]      = useState(null)
+  const [xRangeMinInput, setXRangeMinInput] = useState('-6')
+  const [xRangeMaxInput, setXRangeMaxInput] = useState('6')
+
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
@@ -331,6 +342,88 @@ export default function App() {
                   )}
                 </div>
 
+                {/* Graph Controls (2D) */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Graph Controls</span>
+
+                  {/* Toggle row helper */}
+                  {[
+                    { label: 'Tangent line', value: showTangent, set: setShowTangent },
+                    { label: 'Derivative f′(x)', value: showDerivative, set: setShowDerivative },
+                    { label: 'Grid', value: showGrid, set: setShowGrid },
+                  ].map(({ label, value, set }) => (
+                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
+                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
+                      <span className={styles.toggle}>
+                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
+                        <span className={styles.toggleTrack} />
+                        <span className={styles.toggleThumb} />
+                      </span>
+                    </label>
+                  ))}
+
+                  {/* X-range inputs */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className={styles.areaLabel}>X range</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={xRangeMinInput}
+                        onChange={e => {
+                          setXRangeMinInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setXRangeMin(isFinite(v) ? v : null)
+                        }}
+                        placeholder="−6"
+                        aria-label="X minimum"
+                      />
+                      <span className={styles.areaLabel}>to</span>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        value={xRangeMaxInput}
+                        onChange={e => {
+                          setXRangeMaxInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setXRangeMax(isFinite(v) ? v : null)
+                        }}
+                        placeholder="6"
+                        aria-label="X maximum"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mark point x = a */}
+                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className={styles.areaLabel}>Mark x =</span>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        type="number"
+                        className={styles.curveExprInput}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 70, borderRadius: 2 }}
+                        value={markedXInput}
+                        onChange={e => {
+                          setMarkedXInput(e.target.value)
+                          const v = parseFloat(e.target.value)
+                          setMarkedX(isFinite(v) ? v : null)
+                        }}
+                        placeholder="e.g. 2"
+                        aria-label="Mark x value"
+                      />
+                      {markedX != null && (
+                        <button
+                          className={styles.curveRemoveBtn}
+                          onClick={() => { setMarkedX(null); setMarkedXInput('') }}
+                          title="Clear mark"
+                        >×</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Riemann sum */}
                 <RiemannControls
                   exprStr={activeEq.expr}
@@ -368,6 +461,12 @@ export default function App() {
                   overlayRectangles={riemannRects}
                   showArea={showArea}
                   regionVertices={regionVertices}
+                  showTangent={showTangent}
+                  showDerivative={showDerivative}
+                  showGrid={showGrid}
+                  markedX={markedX}
+                  xRangeMin={xRangeMin}
+                  xRangeMax={xRangeMax}
                 />
               )}
               {graphMode === '3d' && (

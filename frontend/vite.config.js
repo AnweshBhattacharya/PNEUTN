@@ -15,4 +15,27 @@ export default defineConfig({
       '/integral-order': { target: 'http://127.0.0.1:3000', changeOrigin: true },
     },
   },
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'three-vendor': ['three'],
+          'mathjs-vendor': ['mathjs'],
+          'mathlive-vendor': ['mathlive'],
+          'katex-vendor': ['katex'],
+          'react-vendor': ['react', 'react-dom'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
+  },
+
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    pool: 'forks',
+  },
 })
+

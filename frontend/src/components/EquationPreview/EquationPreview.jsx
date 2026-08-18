@@ -49,7 +49,7 @@ export default function EquationPreview({
         }),
         error: null,
       }
-    } catch (e) {
+    } catch {
       // KaTeX parse error — try without the wrapper
       try {
         return {
