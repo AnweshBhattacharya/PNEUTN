@@ -111,6 +111,12 @@ def _gemini_narrate(
         # include request metadata, while the exception class is enough for
         # safe production diagnosis from the client response.
         narration.update({"status": "error", "error_type": type(exc).__name__})
+        error_code = getattr(exc, "code", None)
+        error_status = getattr(exc, "status", None)
+        if isinstance(error_code, int):
+            narration["error_code"] = error_code
+        if isinstance(error_status, str) and error_status.isupper():
+            narration["error_status"] = error_status
         logger.warning("Gemini narration failed (%s: %s); falling back to templates.",
                        type(exc).__name__, str(exc)[:200])
         return _fallback_narrate(steps, wrt)

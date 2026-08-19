@@ -182,6 +182,45 @@ class TestGeminiNarration:
         assert narrated[0]["narrated_by"] == "gemini"
         assert narration == {"provider": "gemini", "model": "gemini-2.5-flash", "status": "active"}
 
+    def test_reports_safe_provider_error_details(self, monkeypatch):
+        import types
+        import solve
+
+        class FakeClientError(Exception):
+            code = 403
+            status = "PERMISSION_DENIED"
+
+        class FakeModels:
+            def generate_content(self, **kwargs):
+                raise FakeClientError("Do not return provider messages to clients")
+
+        class FakeClient:
+            def __init__(self, api_key):
+                self.models = FakeModels()
+
+        fake_google = types.ModuleType("google")
+        fake_google.genai = types.SimpleNamespace(Client=FakeClient)
+        fake_google_genai = types.ModuleType("google.genai")
+        fake_google_genai.types = types.SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs
+        )
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
+        monkeypatch.setattr(solve, "GEMINI_API_KEY", "test-key")
+
+        narration = {}
+        narrated = solve._gemini_narrate(
+            [{"rule": "power_rule", "before_latex": "x^2", "after_latex": "2x"}],
+            "x",
+            narration,
+        )
+
+        assert narrated[0]["narrated_by"] == "fallback_template"
+        assert narration["status"] == "error"
+        assert narration["error_type"] == "FakeClientError"
+        assert narration["error_code"] == 403
+        assert narration["error_status"] == "PERMISSION_DENIED"
+
 
 class TestSolveIntegral:
     def setup_method(self):
