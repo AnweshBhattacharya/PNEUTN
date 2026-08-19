@@ -477,24 +477,63 @@
 }
 .toggle input:checked ~ .toggleThumb { transform: translateX(14px); }
 
-/* ── Numeric sample (sidebar) ──────────────────────────────────────── */
-.numericSampleSection {
-  padding: var(--sp-2);
+/* ── Numeric sample points (below the graph) ───────────────────────── */
+.samplePointPanel {
+  width: 100%;
+  box-sizing: border-box;
+  border-top: 1px solid var(--border-color);
+  background: var(--surface-raised);
+  padding: var(--sp-2) var(--sp-3);
 }
-.numericHeader {
+.samplePointHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
   font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
   color: var(--content-tertiary);
-  display: block;
-  margin-bottom: 4px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-.numericStrip {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.samplePointHeader span:last-child {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
 }
+.samplePointGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+.samplePointCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  row-gap: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: var(--surface-sunken);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  min-width: 0;
+}
+.samplePointLabel {
+  color: var(--content-tertiary);
+  font-size: 10px;
+}
+.samplePointValue {
+  overflow: hidden;
+  color: var(--content-primary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .numericPill {
   font-family: var(--font-mono);
   font-size: 10px;

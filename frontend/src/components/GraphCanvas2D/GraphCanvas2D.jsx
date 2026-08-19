@@ -374,7 +374,9 @@ export default function GraphCanvas2D({
     scene.add(xAxMesh); axisRefs.current.push(xAxMesh)
 
     // Bold Y Axis
-    const yAxGeo = new THREE.PlaneGeometry(thick * ((xR - xL) / (yT - yB)), yT - yB)
+    // The orthographic camera already preserves equal world-unit scaling in
+    // both directions. Reusing `thick` makes both axes the same visual width.
+    const yAxGeo = new THREE.PlaneGeometry(thick, yT - yB)
     const yAxMesh = new THREE.Mesh(yAxGeo, axMatPlane)
     yAxMesh.position.set(0, (yB + yT) / 2, 0.001)
     scene.add(yAxMesh); axisRefs.current.push(yAxMesh)

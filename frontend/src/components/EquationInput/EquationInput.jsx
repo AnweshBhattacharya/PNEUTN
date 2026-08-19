@@ -5,10 +5,25 @@
 import React, { useEffect, useRef, useState } from 'react'
 import 'mathlive'
 import { getSuggestions, lastToken, validateExpr, checkBalance } from '../../lib/smartSyntax'
+import { normaliseMathExpression } from '../../lib/mathInput'
 import EquationPreview from '../EquationPreview/EquationPreview'
 import styles from './EquationInput.module.css'
 
 const WRT_OPTIONS = ['x', 'y', 'z', 't']
+
+/**
+ * MathLive's `value` is LaTeX-oriented. The API and graph evaluator instead
+ * accept ASCII-style maths (for example `sin(x)` and `sqrt(x^2 + 1)`).
+ * Exporting the expression explicitly keeps physical and virtual-keyboard
+ * input on the same safe, executable format.
+ */
+function getExpressionValue(mathfield) {
+  try {
+    return normaliseMathExpression(mathfield.getValue('ascii-math') || mathfield.value || '')
+  } catch {
+    return normaliseMathExpression(mathfield.value || '')
+  }
+}
 
 export default function EquationInput({ value, onChange, onSolve, loading,
   exampleOperation, exampleWrt, exampleBounds }) {
@@ -29,7 +44,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   useEffect(() => {
     if (mlRef.current && mlRef.current.value !== value) {
       mlRef.current.value = value || ''
-      try { setLatexValue(mlRef.current.getValue('latex') || '') } catch {}
+      try { setLatexValue(mlRef.current.getValue('latex') || value || '') } catch { setLatexValue(value || '') }
     }
   }, [value])
 
@@ -48,7 +63,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
 
   const handleInput = (e) => {
     const mf = e.target
-    const expr = mf.value
+    const expr = getExpressionValue(mf)
     const ltx  = mf.getValue('latex')
     setLatexValue(ltx)
 
@@ -72,12 +87,15 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     setActiveSuggestion(-1)
     const ltx = mf.getValue('latex')
     setLatexValue(ltx)
-    onChange?.(mf.value, ltx)
+    onChange?.(getExpressionValue(mf), ltx)
   }
 
   const handleSolve = () => {
     if (!mlRef.current) return
-    const expr = mlRef.current.value
+    // `value` is updated on every MathLive input event and has already been
+    // normalized. Prefer it so a submit cannot reintroduce MathLive's spaced
+    // function serialization (for example `s i n(x)`).
+    const expr = normaliseMathExpression(value || getExpressionValue(mlRef.current))
     const err = validateExpr(expr)
     if (err) { setBalanceError(err); return }
     setBalanceError(null)

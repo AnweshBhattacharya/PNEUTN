@@ -115,7 +115,9 @@ class TestSolveDerivative:
         })
         assert status == 200, body
         assert "x" in body["result_latex"]
-        assert any(step["rule"] == "chain_rule" for step in body["steps"])
+        chain_step = next(step for step in body["steps"] if step["rule"] == "chain_rule")
+        assert "d}{du}" in chain_step["after_latex"]
+        assert "square" not in chain_step["after_latex"]
 
     def test_second_order_derivative(self):
         status, body = self._solve({"expr": "x^4", "operation": "derivative", "wrt": "x", "order": 2})

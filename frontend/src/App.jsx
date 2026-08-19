@@ -323,18 +323,6 @@ export default function App() {
                 </button>
               ))}
             </div>
-            {/* Area toggle in the header strip */}
-            {graphMode === '2d' && (
-              <label className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center' }}>
-                <span className={styles.areaLabel}>Area shading</span>
-                <span className={styles.toggle}>
-                  <input type="checkbox" checked={showArea}
-                    onChange={e => setShowArea(e.target.checked)} />
-                  <span className={styles.toggleTrack} />
-                  <span className={styles.toggleThumb} />
-                </span>
-              </label>
-            )}
           </div>
 
           <div className={styles.bottomRowBody}>
@@ -383,6 +371,7 @@ export default function App() {
 
                   {/* Toggle row helper */}
                   {[
+                    { label: 'Area shading', value: showArea, set: setShowArea },
                     { label: 'Tangent line', value: showTangent, set: setShowTangent },
                     { label: 'Derivative f′(x)', value: showDerivative, set: setShowDerivative },
                     { label: 'Grid', value: showGrid, set: setShowGrid },
@@ -471,20 +460,6 @@ export default function App() {
                 <RegionToggle
                   onRegionData={(data) => setRegionVertices(data.region_vertices ?? null)}
                 />
-
-                {/* Numeric sample */}
-                {activeEq.numericSample?.length > 0 && (
-                  <div className={styles.numericSampleSection}>
-                    <span className={styles.numericHeader}>Sample points</span>
-                    <div className={styles.numericStrip}>
-                      {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
-                        <span key={i} className={styles.numericPill}>
-                          ({x}, {y})
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
               </aside>
             )}
@@ -728,20 +703,41 @@ export default function App() {
             {/* ── Main graph canvas ── */}
             <div className={styles.graphMain}>
               {graphMode === '2d' && (
-                <GraphCanvas2D
-                  equations={graphEquations}
-                  activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
-                  overlayRectangles={riemannRects}
-                  showArea={showArea}
-                  showVolumeRev={showVolumeRev}
-                  regionVertices={regionVertices}
-                  showTangent={showTangent}
-                  showDerivative={showDerivative}
-                  showGrid={showGrid}
-                  markedX={markedX}
-                  xRangeMin={xRangeMin}
-                  xRangeMax={xRangeMax}
-                />
+                <>
+                  <GraphCanvas2D
+                    equations={graphEquations}
+                    activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
+                    overlayRectangles={riemannRects}
+                    showArea={showArea}
+                    showVolumeRev={showVolumeRev}
+                    regionVertices={regionVertices}
+                    showTangent={showTangent}
+                    showDerivative={showDerivative}
+                    showGrid={showGrid}
+                    markedX={markedX}
+                    xRangeMin={xRangeMin}
+                    xRangeMax={xRangeMax}
+                  />
+
+                  {activeEq.numericSample?.length > 0 && (
+                    <section className={styles.samplePointPanel} aria-label="Verified sample points">
+                      <div className={styles.samplePointHeader}>
+                        <span>Sample points</span>
+                        <span>{activeEq.expr}</span>
+                      </div>
+                      <div className={styles.samplePointGrid}>
+                        {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
+                          <div key={i} className={styles.samplePointCard}>
+                            <span className={styles.samplePointLabel}>x</span>
+                            <span className={styles.samplePointValue}>{x}</span>
+                            <span className={styles.samplePointLabel}>y</span>
+                            <span className={styles.samplePointValue}>{y}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </>
               )}
               {graphMode === '3d' && (
                 <GraphCanvas3D

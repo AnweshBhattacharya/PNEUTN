@@ -316,11 +316,13 @@ def _derivative_steps(expr: sympy.Expr, wrt: Symbol, order: int) -> tuple[sympy.
             outer_symbol = sympy.Dummy("u")
             outer_expr = current.xreplace({inner: outer_symbol})
             outer_diff = diff(outer_expr, outer_symbol).subs(outer_symbol, inner)
+            display_symbol = sympy.Symbol("u")
+            display_outer = current.xreplace({inner: display_symbol})
             steps.append({
                 "rule": "chain_rule",
                 "before_latex": before_wrap,
                 "after_latex": (
-                    f"\\underbrace{{\\frac{{d}}{{d(\\square)}}\\left[{latex(current.subs(inner, sympy.Symbol('square')))}\\right]}}_{{\\text{{outer}}}} "
+                    f"\\underbrace{{\\frac{{d}}{{d{latex(display_symbol)}}}\\left[{latex(display_outer)}\\right]}}_{{\\text{{outer}}}} "
                     f"\\cdot \\underbrace{{\\frac{{d}}{{d{latex(wrt)}}}\\left[{latex(inner)}\\right]}}_{{\\text{{inner}}}}"
                 ),
                 "substeps": [
