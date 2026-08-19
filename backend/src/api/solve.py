@@ -28,6 +28,7 @@ from safe_parse import safe_parse, ExpressionError
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # ── Narration templates ─────────────────────────────────────────────────────
 _NARRATION = {
@@ -60,12 +61,17 @@ def _narrate(rule: str, wrt: str = "x") -> str:
 # ── Gemini narration ────────────────────────────────────────────────────────
 
 def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
+    """Narrate verified SymPy steps with Gemini, or use deterministic text."""
     if not GEMINI_API_KEY:
         return _fallback_narrate(steps, wrt)
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        # google-generativeai and gemini-2.0-flash are both retired.  Use the
+        # supported Google Gen AI SDK and a stable model instead.  The key is
+        # supplied only from Lambda's environment; it is never logged or sent
+        # to the browser.
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=GEMINI_API_KEY)
 
         lines = [
             f"Step {i+1}: Rule={s['rule']}. Before={s['before_latex']}. After={s['after_latex']}."
@@ -75,23 +81,24 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
             "You are a calculus tutor. The following steps were computed CORRECTLY by SymPy. "
             "Do NOT change any math. For each step write one clear sentence explaining "
             "what transformation was applied and why, for an undergraduate student. "
-            "Return a JSON array of strings, one per step.\n\n"
+            "Return only a JSON array of strings, one sentence per input step, in the same order.\n\n"
             + "\n".join(lines)
         )
-        response = model.generate_content(prompt)
-        text = response.text
-        import re
-        match = re.search(r'\[.*\]', text, re.DOTALL)
-        if match:
-            narrations = json.loads(match.group(0))
-        elif text.startswith("```"):
-            clean_text = "\n".join(text.split("\n")[1:-1])
-            narrations = json.loads(clean_text)
-        else:
-            narrations = json.loads(text)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
+        narrations = json.loads(response.text or "")
+        if (
+            not isinstance(narrations, list)
+            or not all(isinstance(narration, str) and narration.strip() for narration in narrations)
+        ):
+            raise ValueError("Gemini did not return a JSON array of non-empty narration strings.")
         for i, step in enumerate(steps):
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
-            step["narrated_by"]  = "gemini"
+            step["narrated_by"]  = "gemini" if i < len(narrations) else "fallback_template"
+        logger.info("Gemini narrated %d verified SymPy steps with %s.", len(steps), GEMINI_MODEL)
         return steps
     except Exception as exc:
         logger.warning("Gemini narration failed (%s: %s); falling back to templates.",

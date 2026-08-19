@@ -92,7 +92,7 @@ jobs:
       # Install arm64 manylinux wheels directly — no Docker, no --use-container.
       # --use-container was the root cause of the 1.5-hour job stall: it tries
       # to pull a large Lambda build container image on every run.
-      - name: Build Lambda Layer (sympy + numpy + google-generativeai for arm64)
+      - name: Build Lambda Layer (SymPy, NumPy, Google Gen AI SDK for arm64)
         if: steps.changes.outputs.changed == 'true'
         run: |
           mkdir -p backend/layers/sympy-numpy/python
@@ -103,14 +103,13 @@ jobs:
             --python-version 3.11 \
             --only-binary=:all: \
             --upgrade \
-            sympy numpy google-generativeai
-          # --- ADDED CLEANUP COMMANDS TO BYPASS 250MB LIMIT ---
+            -r backend/requirements.txt
+          # Keep the deployment artifact well below Lambda's unzipped 250 MB
+          # limit without removing installed-package metadata at runtime.
           LAYER_DIR="backend/layers/sympy-numpy/python"
-          find $LAYER_DIR -type d -name "tests" -exec rm -rf {} +
-          find $LAYER_DIR -type d -name "testing" -exec rm -rf {} +
-          find $LAYER_DIR -type d -name "__pycache__" -exec rm -rf {} +
-          find $LAYER_DIR -type d -name "*.dist-info" -exec rm -rf {} +
-          # ----------------------------------------------------
+          find "$LAYER_DIR" -type d -name "tests" -prune -exec rm -rf {} +
+          find "$LAYER_DIR" -type d -name "testing" -prune -exec rm -rf {} +
+          find "$LAYER_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
 
       - name: SAM build
         if: steps.changes.outputs.changed == 'true'

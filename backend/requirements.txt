@@ -1,6 +1,5 @@
-# For local testing reference only.
-# The Lambda Layer is built separately (see DEPLOYMENT.md §3.1).
-# These are NOT installed into the layer via this file.
+# Dependencies for local testing and the Lambda Layer.  The deployment workflow
+# installs this file with arm64 manylinux wheels before SAM packages the layer.
 sympy
 numpy
-google-generativeai
+google-genai>=1.0.0,<2.0.0

@@ -143,6 +143,43 @@ class TestSolveDerivative:
         assert "y" in body["result_latex"] or "2" in body["result_latex"]
 
 
+class TestGeminiNarration:
+    def test_uses_current_sdk_and_stable_model(self, monkeypatch):
+        """Gemini is narration-only and receives already verified step data."""
+        import types
+        import solve
+
+        calls = []
+
+        class FakeModels:
+            def generate_content(self, **kwargs):
+                calls.append(kwargs)
+                return types.SimpleNamespace(text='["Apply the power rule."]')
+
+        class FakeClient:
+            def __init__(self, api_key):
+                assert api_key == "test-key"
+                self.models = FakeModels()
+
+        fake_google = types.ModuleType("google")
+        fake_google.genai = types.SimpleNamespace(Client=FakeClient)
+        fake_google_genai = types.ModuleType("google.genai")
+        fake_google_genai.types = types.SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs
+        )
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
+        monkeypatch.setattr(solve, "GEMINI_API_KEY", "test-key")
+
+        steps = [{"rule": "power_rule", "before_latex": "x^2", "after_latex": "2x"}]
+        narrated = solve._gemini_narrate(steps, "x")
+
+        assert calls[0]["model"] == "gemini-2.5-flash"
+        assert calls[0]["config"]["response_mime_type"] == "application/json"
+        assert narrated[0]["explanation"] == "Apply the power rule."
+        assert narrated[0]["narrated_by"] == "gemini"
+
+
 class TestSolveIntegral:
     def setup_method(self):
         import app as app_module
