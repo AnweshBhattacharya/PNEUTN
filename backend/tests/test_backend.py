@@ -85,6 +85,7 @@ class TestSolveDerivative:
         status, body = self._solve({"expr": "x^3", "operation": "derivative", "wrt": "x"})
         assert status == 200, body
         assert "result_latex" in body
+        assert body["narration"]["status"] == "not_configured"
         # d/dx x^3 = 3x^2
         assert "3" in body["result_latex"]
         assert "x" in body["result_latex"]
@@ -172,12 +173,14 @@ class TestGeminiNarration:
         monkeypatch.setattr(solve, "GEMINI_API_KEY", "test-key")
 
         steps = [{"rule": "power_rule", "before_latex": "x^2", "after_latex": "2x"}]
-        narrated = solve._gemini_narrate(steps, "x")
+        narration = {}
+        narrated = solve._gemini_narrate(steps, "x", narration)
 
         assert calls[0]["model"] == "gemini-2.5-flash"
         assert calls[0]["config"]["response_mime_type"] == "application/json"
         assert narrated[0]["explanation"] == "Apply the power rule."
         assert narrated[0]["narrated_by"] == "gemini"
+        assert narration == {"provider": "gemini", "model": "gemini-2.5-flash", "status": "active"}
 
 
 class TestSolveIntegral:

@@ -60,9 +60,14 @@ def _narrate(rule: str, wrt: str = "x") -> str:
 
 # ── Gemini narration ────────────────────────────────────────────────────────
 
-def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
+def _gemini_narrate(
+    steps: list[dict], wrt: str, narration: dict | None = None
+) -> list[dict]:
     """Narrate verified SymPy steps with Gemini, or use deterministic text."""
+    narration = narration if narration is not None else {}
+    narration.update({"provider": "gemini", "model": GEMINI_MODEL})
     if not GEMINI_API_KEY:
+        narration["status"] = "not_configured"
         return _fallback_narrate(steps, wrt)
     try:
         # google-generativeai and gemini-2.0-flash are both retired.  Use the
@@ -98,9 +103,14 @@ def _gemini_narrate(steps: list[dict], wrt: str) -> list[dict]:
         for i, step in enumerate(steps):
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
             step["narrated_by"]  = "gemini" if i < len(narrations) else "fallback_template"
+        narration["status"] = "active"
         logger.info("Gemini narrated %d verified SymPy steps with %s.", len(steps), GEMINI_MODEL)
         return steps
     except Exception as exc:
+        # This deliberately excludes exception text: provider messages can
+        # include request metadata, while the exception class is enough for
+        # safe production diagnosis from the client response.
+        narration.update({"status": "error", "error_type": type(exc).__name__})
         logger.warning("Gemini narration failed (%s: %s); falling back to templates.",
                        type(exc).__name__, str(exc)[:200])
         return _fallback_narrate(steps, wrt)
@@ -496,7 +506,8 @@ def handle(body: dict) -> dict:
                 bounds = validated_bounds
             result, steps = _integral_steps(expr, wrt, bounds)
 
-        steps  = _gemini_narrate(steps, wrt_str)
+        narration = {}
+        steps  = _gemini_narrate(steps, wrt_str, narration)
         samples = _numeric_sample(result, wrt, wrt_name=wrt_str)
 
         return {
@@ -505,6 +516,7 @@ def handle(body: dict) -> dict:
             "body": json.dumps({
                 "result_latex": latex(result),
                 "result_numeric_sample": samples,
+                "narration": narration,
                 "steps": steps,
             }),
         }

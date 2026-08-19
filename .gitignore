@@ -42,5 +42,7 @@ Thumbs.db
 # Markdown docs — kept locally, excluded from GitHub to keep the repo clean
 *.md
 !README.md
-!bugfixes.md
 README.md
+
+# Local Kiro IDE workflow metadata
+.kiro/
