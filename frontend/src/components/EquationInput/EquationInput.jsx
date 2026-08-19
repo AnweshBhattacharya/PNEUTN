@@ -149,15 +149,11 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           class={styles.mathField}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Type a math expression"
+          placeholder="Type\ a\ math\ expression"
           virtual-keyboard-mode="manual"
           smart-mode="false"
         />
       </div>
-
-      <p className={styles.formatHint}>
-        Functions: sin, cos, exp, log, sqrt. Graphs show real-valued expressions; symbolic results may include i.
-      </p>
 
       {balanceError && (
         <p className={styles.errorHint} role="alert">{balanceError}</p>
