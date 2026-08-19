@@ -106,6 +106,17 @@ class TestSolveDerivative:
         assert status == 200
         assert "result_latex" in body
 
+    def test_nested_chain_rule_does_not_crash(self):
+        """Compound inner expressions must be differentiated via a placeholder."""
+        status, body = self._solve({
+            "expr": "sqrt(x^2+1)/(1+x^2)",
+            "operation": "derivative",
+            "wrt": "x",
+        })
+        assert status == 200, body
+        assert "x" in body["result_latex"]
+        assert any(step["rule"] == "chain_rule" for step in body["steps"])
+
     def test_second_order_derivative(self):
         status, body = self._solve({"expr": "x^4", "operation": "derivative", "wrt": "x", "order": 2})
         assert status == 200, body

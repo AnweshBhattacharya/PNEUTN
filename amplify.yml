@@ -8,7 +8,9 @@ applications:
             - npm ci
         build:
           commands:
-            - npm run build
+            # Public API Gateway URL from the pneutn-backend stack. Keep the
+            # deployed frontend aligned with the Lambda managed by GitHub Actions.
+            - VITE_API_BASE_URL=https://dxd5fznww1.execute-api.ap-south-1.amazonaws.com npm run build
       artifacts:
         baseDirectory: dist
         files:

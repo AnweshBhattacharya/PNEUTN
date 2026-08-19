@@ -40,6 +40,14 @@
 /* ── MathLive input ── */
 .inputRow { width: 100%; }
 
+.formatHint {
+  margin: 0;
+  color: var(--content-tertiary);
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  line-height: 1.45;
+}
+
 .mathField {
   width: 100%;
   min-height: 56px;

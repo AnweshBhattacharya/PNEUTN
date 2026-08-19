@@ -123,12 +123,6 @@ export default function EquationInput({ value, onChange, onSolve, loading,
 
   return (
     <div className={styles.wrapper}>
-      {/* ── Header ── */}
-      <div className={styles.header}>
-        <h2 className={styles.title}>PNEUTN</h2>
-        <p className={styles.subtitle}>Calculus Visualizer</p>
-      </div>
-
       {/* ── MathLive input ── */}
       <div className={styles.inputRow}>
         <math-field
@@ -137,11 +131,15 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           class={styles.mathField}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Type a math expression…"
+          placeholder="Type a math expression"
           virtual-keyboard-mode="manual"
           smart-mode="false"
         />
       </div>
+
+      <p className={styles.formatHint}>
+        Functions: sin, cos, exp, log, sqrt. Graphs show real-valued expressions; symbolic results may include i.
+      </p>
 
       {balanceError && (
         <p className={styles.errorHint} role="alert">{balanceError}</p>
@@ -309,10 +307,9 @@ export default function EquationInput({ value, onChange, onSolve, loading,
               Solving…
             </>
           ) : (
-            <>Solve <span className={styles.solveBtnArrow}>→</span></>
+            <>Solve <span className={styles.solveBtnArrow}></span></>
           )}
         </button>
-        <p className={styles.shortcutHint}>Ctrl + Enter</p>
       </div>
     </div>
   )

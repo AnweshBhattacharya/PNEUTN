@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import sympy
+from sympy.core.sympify import SympifyError
 from sympy import (
     symbols, diff, integrate, latex,
     Symbol, Add, Mul, Pow, Function,
@@ -308,7 +309,13 @@ def _derivative_steps(expr: sympy.Expr, wrt: Symbol, order: int) -> tuple[sympy.
                                                             asin, acos, atan, sinh, cosh, tanh)):
             inner = current.args[0]
             d_inner = diff(inner, wrt)
-            outer_diff = diff(current, inner)   # df/d(inner)
+            # SymPy only differentiates with respect to symbols, not compound
+            # expressions (for example ``x**2 + 1``). Replace the inner
+            # expression with a temporary symbol to obtain the outer
+            # derivative, then substitute it back for display.
+            outer_symbol = sympy.Dummy("u")
+            outer_expr = current.xreplace({inner: outer_symbol})
+            outer_diff = diff(outer_expr, outer_symbol).subs(outer_symbol, inner)
             steps.append({
                 "rule": "chain_rule",
                 "before_latex": before_wrap,
@@ -584,7 +591,7 @@ def handle(body: dict) -> dict:
             }),
         }
 
-    except sympy.core.sympify.SympifyError as e:
+    except SympifyError as e:
         return _error("invalid_expression", f"SymPy error: {e}")
     except Exception as e:
         return _error("internal_error", f"Unexpected error: {e}", 500)
