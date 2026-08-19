@@ -33,6 +33,14 @@ GEMINI_MODEL = "gemini-2.5-flash"
 # endpoint. Flash-Lite is sufficient for narration and avoids taking down a
 # correct solve when the preferred model is unavailable to a project.
 GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
+_MODEL_PREFERENCE = (
+    GEMINI_MODEL,
+    GEMINI_FALLBACK_MODEL,
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.1-flash-lite",
+)
 
 # ── Narration templates ─────────────────────────────────────────────────────
 _NARRATION = {
@@ -63,6 +71,27 @@ def _narrate(rule: str, wrt: str = "x") -> str:
 
 
 # ── Gemini narration ────────────────────────────────────────────────────────
+
+def _available_narration_models(client) -> list[str]:
+    """Return usable text Flash models exposed to this API key's project."""
+    try:
+        available = set()
+        for model in client.models.list():
+            name = getattr(model, "name", "")
+            actions = getattr(model, "supported_actions", None) or []
+            model_id = name.removeprefix("models/")
+            if (
+                model_id.startswith("gemini-")
+                and "flash" in model_id
+                and not any(kind in model_id for kind in ("image", "audio", "tts", "live"))
+                and (not actions or "generateContent" in actions)
+            ):
+                available.add(model_id)
+        return [model for model in _MODEL_PREFERENCE if model in available]
+    except Exception as exc:
+        logger.warning("Could not list Gemini models (%s); using configured fallbacks.", type(exc).__name__)
+        return []
+
 
 def _gemini_narrate(
     steps: list[dict], wrt: str, narration: dict | None = None
@@ -96,7 +125,14 @@ def _gemini_narrate(
         response = None
         selected_model = GEMINI_MODEL
         model_not_found_error = None
-        for candidate_model in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL):
+        attempted_models = []
+        candidate_models = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
+
+        while candidate_models:
+            candidate_model = candidate_models.pop(0)
+            if candidate_model in attempted_models:
+                continue
+            attempted_models.append(candidate_model)
             try:
                 response = client.models.generate_content(
                     model=candidate_model,
@@ -110,7 +146,10 @@ def _gemini_narrate(
                     raise
                 model_not_found_error = exc
                 logger.info("Gemini model %s is unavailable; trying fallback.", candidate_model)
+                if candidate_model == GEMINI_FALLBACK_MODEL:
+                    candidate_models.extend(_available_narration_models(client))
         if response is None:
+            narration["models_tried"] = attempted_models
             raise model_not_found_error or RuntimeError("No compatible Gemini narration model found.")
         narrations = json.loads(response.text or "")
         if (

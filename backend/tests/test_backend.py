@@ -263,6 +263,60 @@ class TestGeminiNarration:
         assert narration["status"] == "active"
         assert narration["model"] == solve.GEMINI_FALLBACK_MODEL
 
+    def test_discovers_an_available_flash_model_after_not_found(self, monkeypatch):
+        import types
+        import solve
+
+        calls = []
+
+        class FakeNotFoundError(Exception):
+            code = 404
+            status = "NOT_FOUND"
+
+        class FakeModels:
+            def generate_content(self, **kwargs):
+                calls.append(kwargs["model"])
+                if kwargs["model"] != "gemini-3.6-flash":
+                    raise FakeNotFoundError("Model unavailable")
+                return types.SimpleNamespace(text='["Apply the power rule."]')
+
+            def list(self):
+                return [
+                    types.SimpleNamespace(
+                        name="models/gemini-3.6-flash",
+                        supported_actions=["generateContent"],
+                    )
+                ]
+
+        class FakeClient:
+            def __init__(self, api_key):
+                self.models = FakeModels()
+
+        fake_google = types.ModuleType("google")
+        fake_google.genai = types.SimpleNamespace(Client=FakeClient)
+        fake_google_genai = types.ModuleType("google.genai")
+        fake_google_genai.types = types.SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs
+        )
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
+        monkeypatch.setattr(solve, "GEMINI_API_KEY", "test-key")
+
+        narration = {}
+        solve._gemini_narrate(
+            [{"rule": "power_rule", "before_latex": "x^2", "after_latex": "2x"}],
+            "x",
+            narration,
+        )
+
+        assert calls == [
+            solve.GEMINI_MODEL,
+            solve.GEMINI_FALLBACK_MODEL,
+            "gemini-3.6-flash",
+        ]
+        assert narration["status"] == "active"
+        assert narration["model"] == "gemini-3.6-flash"
+
 
 class TestSolveIntegral:
     def setup_method(self):
