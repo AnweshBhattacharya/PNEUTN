@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = "gemini-2.5-flash"
+# Google exposes models per project and may retire or phase availability by
+# endpoint. Flash-Lite is sufficient for narration and avoids taking down a
+# correct solve when the preferred model is unavailable to a project.
+GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 
 # ── Narration templates ─────────────────────────────────────────────────────
 _NARRATION = {
@@ -89,11 +93,25 @@ def _gemini_narrate(
             "Return only a JSON array of strings, one sentence per input step, in the same order.\n\n"
             + "\n".join(lines)
         )
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
+        response = None
+        selected_model = GEMINI_MODEL
+        model_not_found_error = None
+        for candidate_model in (GEMINI_MODEL, GEMINI_FALLBACK_MODEL):
+            try:
+                response = client.models.generate_content(
+                    model=candidate_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json"),
+                )
+                selected_model = candidate_model
+                break
+            except Exception as exc:
+                if getattr(exc, "code", None) != 404:
+                    raise
+                model_not_found_error = exc
+                logger.info("Gemini model %s is unavailable; trying fallback.", candidate_model)
+        if response is None:
+            raise model_not_found_error or RuntimeError("No compatible Gemini narration model found.")
         narrations = json.loads(response.text or "")
         if (
             not isinstance(narrations, list)
@@ -103,8 +121,8 @@ def _gemini_narrate(
         for i, step in enumerate(steps):
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
             step["narrated_by"]  = "gemini" if i < len(narrations) else "fallback_template"
-        narration["status"] = "active"
-        logger.info("Gemini narrated %d verified SymPy steps with %s.", len(steps), GEMINI_MODEL)
+        narration.update({"status": "active", "model": selected_model})
+        logger.info("Gemini narrated %d verified SymPy steps with %s.", len(steps), selected_model)
         return steps
     except Exception as exc:
         # This deliberately excludes exception text: provider messages can

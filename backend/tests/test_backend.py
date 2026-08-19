@@ -221,6 +221,48 @@ class TestGeminiNarration:
         assert narration["error_code"] == 403
         assert narration["error_status"] == "PERMISSION_DENIED"
 
+    def test_uses_flash_lite_when_flash_is_unavailable(self, monkeypatch):
+        import types
+        import solve
+
+        calls = []
+
+        class FakeNotFoundError(Exception):
+            code = 404
+            status = "NOT_FOUND"
+
+        class FakeModels:
+            def generate_content(self, **kwargs):
+                calls.append(kwargs["model"])
+                if kwargs["model"] == solve.GEMINI_MODEL:
+                    raise FakeNotFoundError("The preferred model is unavailable")
+                return types.SimpleNamespace(text='["Apply the power rule."]')
+
+        class FakeClient:
+            def __init__(self, api_key):
+                self.models = FakeModels()
+
+        fake_google = types.ModuleType("google")
+        fake_google.genai = types.SimpleNamespace(Client=FakeClient)
+        fake_google_genai = types.ModuleType("google.genai")
+        fake_google_genai.types = types.SimpleNamespace(
+            GenerateContentConfig=lambda **kwargs: kwargs
+        )
+        monkeypatch.setitem(sys.modules, "google", fake_google)
+        monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
+        monkeypatch.setattr(solve, "GEMINI_API_KEY", "test-key")
+
+        narration = {}
+        solve._gemini_narrate(
+            [{"rule": "power_rule", "before_latex": "x^2", "after_latex": "2x"}],
+            "x",
+            narration,
+        )
+
+        assert calls == [solve.GEMINI_MODEL, solve.GEMINI_FALLBACK_MODEL]
+        assert narration["status"] == "active"
+        assert narration["model"] == solve.GEMINI_FALLBACK_MODEL
+
 
 class TestSolveIntegral:
     def setup_method(self):
