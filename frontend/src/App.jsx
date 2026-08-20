@@ -765,11 +765,6 @@ export default function App() {
         </div>
 
       </main>
-
-      <footer className={styles.footer}>
-        <span>PNEUTN — anonymous · stateless · serverless</span>
-        <span>React + Three.js + SymPy + Gemini</span>
-      </footer>
     </div>
   )
 }
