@@ -89,7 +89,7 @@ export default function GraphCanvas3D({
   yMin = -4, yMax = 4,
   zMinLimit = null, zMaxLimit = null,
   n = 40,
-  _samplePoint = 'midpoint',
+  samplePoint = 'midpoint',
   extraVars = {},
   showVolume = true,
   showGrid = true,
@@ -562,7 +562,20 @@ export default function GraphCanvas3D({
     const xStep = (xMax - xMin) / segments
     const yStep = (yMax - yMin) / segments
     const dA = xStep * yStep
-    const approxVolume = sumZ * dA
+
+    let approxVolume = 0
+    for (let j = 0; j < segments; j++) {
+      let ySample = yMin + (j + 0.5) * yStep
+      if (samplePoint === 'left') ySample = yMin + j * yStep
+      else if (samplePoint === 'right') ySample = yMin + (j + 1) * yStep
+      for (let i = 0; i < segments; i++) {
+        let xSample = xMin + (i + 0.5) * xStep
+        if (samplePoint === 'left') xSample = xMin + i * xStep
+        else if (samplePoint === 'right') xSample = xMin + (i + 1) * xStep
+        const zSample = evalAt(comp, { x: xSample, y: ySample, ...extraVars }) ?? 0
+        approxVolume += zSample * dA
+      }
+    }
     setVolumeEst(approxVolume)
     onVolumeCalculated?.({ volume: approxVolume, zMin, zMax })
 
@@ -633,7 +646,7 @@ export default function GraphCanvas3D({
       fp[9] = xMax; fp[10] = 0; fp[11] = yMax
       floorPosRef.current.needsUpdate = true
     }
-  }, [exprStr, extraVars, xMin, xMax, yMin, yMax, zMinLimit, zMaxLimit, segments, onVolumeCalculated])
+  }, [exprStr, extraVars, xMin, xMax, yMin, yMax, zMinLimit, zMaxLimit, segments, samplePoint, onVolumeCalculated])
 
   // ── B7: 3D Derivative Cross-Section Overlay Lines ───────────────────────
   useEffect(() => {

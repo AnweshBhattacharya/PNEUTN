@@ -148,10 +148,11 @@ export default function App() {
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
 
-  // B9: Clear Riemann state when the active equation changes
+  // B9: Clear Riemann state and area value when the active equation changes
   useEffect(() => {
     setRiemannRects([])
     setRiemannSumResult(null)
+    setAreaValue(null)
   }, [activeId])
 
   // M2: Mobile tab switch resize — dual timer ensures canvas is mounted

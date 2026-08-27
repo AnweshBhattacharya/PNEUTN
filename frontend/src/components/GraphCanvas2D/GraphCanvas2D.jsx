@@ -291,8 +291,10 @@ export default function GraphCanvas2D({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isExpanded])
 
-  const xMin = xRangeMin ?? DEFAULT_X_MIN
-  const xMax = xRangeMax ?? DEFAULT_X_MAX
+  const rawXMin = xRangeMin ?? DEFAULT_X_MIN
+  const rawXMax = xRangeMax ?? DEFAULT_X_MAX
+  const xMin = rawXMin < rawXMax ? rawXMin : rawXMin
+  const xMax = rawXMin < rawXMax ? rawXMax : rawXMin + 1
 
   const getViewBounds = useCallback(() => {
     const mount = mountRef.current

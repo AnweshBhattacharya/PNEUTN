@@ -70,8 +70,10 @@ export default function EquationPreview({
     }
   }, [latexExpr, operation, wrt, order, boundsEnabled, boundLo, boundHi])
 
+  const SUPERSCRIPTS = { 1: '', 2: '²', 3: '³', 4: '⁴', 5: '⁵' }
+  const sup = SUPERSCRIPTS[order] ?? (order > 1 ? `^${order}` : '')
   const opLabel = operation === 'derivative'
-    ? `d${order > 1 ? `${order}` : ''}/d${wrt}${order > 1 ? `${order}` : ''}`
+    ? `d${sup}/d${wrt}${sup}`
     : `∫ d${wrt}`
 
   return (

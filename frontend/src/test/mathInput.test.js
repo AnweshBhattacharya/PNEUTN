@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normaliseMathExpression } from '../lib/mathInput'
+import { extractVariables } from '../components/EquationInput/EquationInput'
 
 describe('normaliseMathExpression', () => {
   it('rejoins MathLive-spaced function names', () => {
@@ -10,5 +11,19 @@ describe('normaliseMathExpression', () => {
 
   it('preserves implicit multiplication and trims whitespace', () => {
     expect(normaliseMathExpression('  2 x + y  ')).toBe('2 x + y')
+  })
+})
+
+describe('extractVariables', () => {
+  it('extracts unique single letter variables from math expressions', () => {
+    expect(extractVariables('x^2')).toEqual(['x'])
+    expect(extractVariables('x^2 * y^3')).toEqual(['x', 'y'])
+    expect(extractVariables('sin(x) + cos(y) * exp(t)')).toEqual(['x', 'y', 't'])
+    expect(extractVariables('5')).toEqual(['x'])
+  })
+
+  it('ignores function names and mathematical constants', () => {
+    expect(extractVariables('sin(pi * x) + exp(E)')).toEqual(['x'])
+    expect(extractVariables('log(x) + sqrt(y)')).toEqual(['x', 'y'])
   })
 })

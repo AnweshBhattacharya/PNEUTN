@@ -2,14 +2,32 @@
  * EquationInput — MathLive keyboard + live LaTeX preview + Smart Syntax.
  * No dropdowns anywhere: pill toggles, steppers, toggle switches.
  */
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 import 'mathlive'
 import { getSuggestions, lastToken, validateExpr, checkBalance } from '../../lib/smartSyntax'
 import { normaliseMathExpression } from '../../lib/mathInput'
 import EquationPreview from '../EquationPreview/EquationPreview'
 import styles from './EquationInput.module.css'
 
-const WRT_OPTIONS = ['x', 'y', 'z', 't']
+export function extractVariables(exprStr) {
+  if (!exprStr || typeof exprStr !== 'string') return ['x']
+  const reserved = new Set([
+    'e', 'pi', 'i',
+    'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
+    'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+    'asinh', 'acosh', 'atanh',
+    'exp', 'log', 'ln', 'sqrt', 'abs', 'sign', 'd', 'dx', 'dy', 'dz', 'dt'
+  ])
+  const matches = exprStr.match(/[a-zA-Z]+/g) || []
+  const vars = []
+  for (const m of matches) {
+    const lower = m.toLowerCase()
+    if (m.length === 1 && !reserved.has(lower) && !vars.includes(lower)) {
+      vars.push(lower)
+    }
+  }
+  return vars.length > 0 ? vars : ['x']
+}
 
 /**
  * MathLive's `value` is LaTeX-oriented. The API and graph evaluator instead
@@ -39,6 +57,25 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   const [boundLo, setBoundLo] = useState('0')
   const [boundHi, setBoundHi] = useState('1')
   const boundsToggleId = 'bounds-toggle'
+
+  const wrtOptions = useMemo(() => {
+    const raw = value || latexValue || ''
+    const detected = extractVariables(raw)
+    const defaults = ['x', 'y', 'z', 't']
+    const combined = [...detected]
+    for (const d of defaults) {
+      if (!combined.includes(d) && combined.length < 5) {
+        combined.push(d)
+      }
+    }
+    return combined
+  }, [value, latexValue])
+
+  useEffect(() => {
+    if (!wrtOptions.includes(wrt) && wrtOptions.length > 0) {
+      setWrt(wrtOptions[0])
+    }
+  }, [wrtOptions, wrt])
 
   // Sync MathLive if parent changes value programmatically
   useEffect(() => {
@@ -221,7 +258,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>Wrt</span>
             <div className={styles.pillGroup} role="group" aria-label="Variable">
-              {WRT_OPTIONS.map(v => (
+              {wrtOptions.map(v => (
                 <button
                   key={v}
                   className={`${styles.pill} ${wrt === v ? styles.pillActive : ''}`}
