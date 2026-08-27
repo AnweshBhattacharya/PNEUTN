@@ -325,9 +325,11 @@ export default function GraphCanvas2D({
       const arr = posAttr.array
       const cnt = Math.min(pts.length, N_POINTS)
       for (let i = 0; i < cnt; i++) {
-        arr[i * 3] = pts[i].x; arr[i * 3 + 1] = pts[i].y; arr[i * 3 + 2] = 0
+        arr[i * 3] = pts[i].x; arr[i * 3 + 1] = pts[i].y; arr[i * 3 + 2] = 0.01
       }
-      for (let i = cnt; i < N_POINTS; i++) arr[i * 3] = arr[i * 3 + 1] = arr[i * 3 + 2] = 0
+      for (let i = cnt; i < N_POINTS; i++) {
+        arr[i * 3] = 0; arr[i * 3 + 1] = 0; arr[i * 3 + 2] = 0.01
+      }
       posAttr.needsUpdate = true
       line.geometry.setDrawRange(0, cnt)
     })
@@ -649,7 +651,7 @@ export default function GraphCanvas2D({
     }, { passive: true })
     el.addEventListener('touchend', () => { isDragging.current = false; lastPinch.current = null })
 
-    animProgressRefs.current = [0]
+    animProgressRefs.current = [1]
     const animate = () => {
       animRef.current = requestAnimationFrame(animate)
       curveLinesRef.current.forEach(({ line }, i) => {

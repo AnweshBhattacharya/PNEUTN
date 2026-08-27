@@ -139,11 +139,9 @@ jobs:
         working-directory: backend
         shell: bash
         run: |
-          # Build parameter overrides — only include AmplifyDomain if set
-          PARAM_OVERRIDES="GeminiApiKey=${{ env.GEMINI_API_KEY }}"
-          if [ -n "${{ env.AMPLIFY_DOMAIN }}" ]; then
-            PARAM_OVERRIDES="$PARAM_OVERRIDES AmplifyDomain=${{ env.AMPLIFY_DOMAIN }}"
-          fi
+          # Build parameter overrides safely
+          GEMINI_KEY="${GEMINI_API_KEY:-}"
+          DOMAIN="${AMPLIFY_DOMAIN:-https://main.d374q6vzj4flmw.amplifyapp.com}"
 
           sam deploy \
             --no-confirm-changeset \
@@ -151,7 +149,7 @@ jobs:
             --stack-name pneutn-backend \
             --resolve-s3 \
             --capabilities CAPABILITY_IAM \
-            --parameter-overrides "$PARAM_OVERRIDES"
+            --parameter-overrides GeminiApiKey="$GEMINI_KEY" AmplifyDomain="$DOMAIN"
 
           # Capture the API URL output for downstream consumers
           API_URL=$(aws cloudformation describe-stacks \
