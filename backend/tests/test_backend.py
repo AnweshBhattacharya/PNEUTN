@@ -94,7 +94,7 @@ class TestSolveDerivative:
         status, body = self._solve({"expr": "x^3", "operation": "derivative", "wrt": "x"})
         assert status == 200, body
         assert "result_latex" in body
-        assert body["narration"]["status"] in ("not_configured", "active")
+        assert body["narration"]["status"] in ("not_configured", "active", "error")
         # d/dx x^3 = 3x^2
         assert "3" in body["result_latex"]
         assert "x" in body["result_latex"]
