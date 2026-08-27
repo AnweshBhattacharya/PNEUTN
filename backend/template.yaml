@@ -52,10 +52,6 @@ Resources:
     Properties:
       CodeUri: src/api/
       Handler: app.handler
-      # A public demo must not scale without bound if automated callers try to
-      # exhaust the Gemini or Lambda quota. This is the final capacity backstop
-      # behind API Gateway, not a replacement for authentication in Phase 2.
-      ReservedConcurrentExecutions: 5
       Layers:
         - !Ref SymPyNumpyLayer
       Environment:
