@@ -13,10 +13,9 @@ Parameters:
 
   AmplifyDomain:
     Type: String
-    Default: ""
+    Default: "https://main.d374q6vzj4flmw.amplifyapp.com"
     Description: >
-      Your Amplify app domain, e.g. https://main.abcdef1234.amplifyapp.com
-      Set at deploy time via --parameter-overrides.
+      Allowed browser origin. Override only when the deployed frontend domain changes.
 
 Globals:
   Function:
@@ -29,7 +28,7 @@ Globals:
   HttpApi:
     CorsConfiguration:
       AllowOrigins:
-        - "*"
+        - !Ref AmplifyDomain
       AllowMethods:
         - POST
         - OPTIONS
@@ -53,6 +52,10 @@ Resources:
     Properties:
       CodeUri: src/api/
       Handler: app.handler
+      # A public demo must not scale without bound if automated callers try to
+      # exhaust the Gemini or Lambda quota. This is the final capacity backstop
+      # behind API Gateway, not a replacement for authentication in Phase 2.
+      ReservedConcurrentExecutions: 5
       Layers:
         - !Ref SymPyNumpyLayer
       Environment:

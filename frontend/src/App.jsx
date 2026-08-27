@@ -1,5 +1,5 @@
 /**
- * App.jsx — Pneutn main layout (redesigned).
+ * App.jsx — Pneutn main layout.
  *
  * Layout (desktop):
  *   TOP ROW  — 50/50 split, fixed height ~52vh
@@ -10,8 +10,19 @@
  *     Graph   : Full-width 2D/3D canvas + graph tabs
  *
  * On mobile: tabs switch between Input / Graph / Steps views.
+ *
+ * Bug fixes applied (see bugfix.md):
+ *   B0  — Removed duplicate import block and broken JSX fragment
+ *   B1  — RiemannControls now receives dynamic riemannBoundsLo/Hi state
+ *   B9  — riemannRects + riemannSumResult cleared on activeId change
+ *   U1  — onSumResult wired to setRiemannSumResult
+ *   U3  — 3D sidebar controls (domain limits, mark point) fully restored
+ *   U6  — onRegionData wired to setRegionVertices
+ *   V3  — areaValue + onAreaValue wired to GraphCanvas2D
+ *   M2  — Mobile resize uses dual setTimeout (150ms + 400ms) for reliability
+ *   F11 — Theme read from useTheme() state, not from DOM inline
  */
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
@@ -82,10 +93,18 @@ export default function App() {
   const [activeId, setActiveId]     = useState(equations[0].id)
   const [graphMode, setGraphMode]   = useState('2d')
   const [riemannRects, setRiemannRects] = useState([])
+  // U1: surface Riemann results to parent
+  const [riemannSumResult, setRiemannSumResult] = useState(null)
   const [showArea, setShowArea]     = useState(false)
+  // V3: area numeric value
+  const [areaValue, setAreaValue]   = useState(null)
   const [regionVertices, setRegionVertices] = useState(null)
   const [activeExamplePatch, setActiveExamplePatch] = useState(null)
   const [mobilePanel, setMobilePanel] = useState('input')
+
+  // B1: dynamic Riemann bounds (replaces hardcoded [0,4])
+  const [riemannBoundsLo, setRiemannBoundsLo] = useState('0')
+  const [riemannBoundsHi, setRiemannBoundsHi] = useState('4')
 
   // 2D graph parameter controls
   const [showTangent,    setShowTangent]    = useState(true)
@@ -99,7 +118,7 @@ export default function App() {
   const [xRangeMinInput, setXRangeMinInput] = useState('-6')
   const [xRangeMaxInput, setXRangeMaxInput] = useState('6')
 
-  // 3D graph parameter & limit controls
+  // 3D graph parameter & limit controls (U3: fully restored)
   const [xMin3D,         setXMin3D]         = useState(-4)
   const [xMax3D,         setXMax3D]         = useState(4)
   const [yMin3D,         setYMin3D]         = useState(-4)
@@ -129,11 +148,18 @@ export default function App() {
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
 
-  // Mobile tab switch resize trigger (Bug 7 / Bug 11)
+  // B9: Clear Riemann state when the active equation changes
+  useEffect(() => {
+    setRiemannRects([])
+    setRiemannSumResult(null)
+  }, [activeId])
+
+  // M2: Mobile tab switch resize — dual timer ensures canvas is mounted
   useEffect(() => {
     if (mobilePanel === 'graph') {
-      const timer = setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
-      return () => clearTimeout(timer)
+      const t1 = setTimeout(() => window.dispatchEvent(new Event('resize')), 150)
+      const t2 = setTimeout(() => window.dispatchEvent(new Event('resize')), 400)
+      return () => { clearTimeout(t1); clearTimeout(t2) }
     }
   }, [mobilePanel])
 
@@ -184,6 +210,7 @@ export default function App() {
   const loadExample = (example) => {
     updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
     setRiemannRects([])
+    setRiemannSumResult(null)
     setActiveExamplePatch({
       operation: example.operation ?? null,
       wrt:       example.wrt       ?? null,
@@ -191,9 +218,16 @@ export default function App() {
     })
   }
 
+  // B1: parse riemann bounds for passing to component
+  const riemannBounds = (() => {
+    const lo = parseFloat(riemannBoundsLo)
+    const hi = parseFloat(riemannBoundsHi)
+    return [isFinite(lo) ? lo : 0, isFinite(hi) ? hi : 4]
+  })()
+
   const anyLoading = equations.some(e => e.loading)
-  // graphEquations: only pass expr so GraphCanvas2D gets the raw math string
   const graphEquations = equations.map(e => ({ id: e.id, expr: e.expr }))
+  // F11: read colors from theme state, not from DOM attribute inline
   const colors = theme === 'dark' ? EQ_COLORS_DARK : EQ_COLORS
 
   return (
@@ -327,7 +361,7 @@ export default function App() {
 
           <div className={styles.bottomRowBody}>
 
-            {/* ── Left sidebar: curve list + controls ── */}
+            {/* ── Left sidebar: 2D curve list + controls ── */}
             {graphMode === '2d' && (
               <aside className={styles.graphSidebar}>
 
@@ -369,13 +403,12 @@ export default function App() {
                 <div className={styles.curveListSection}>
                   <span className={styles.sidebarSectionLabel}>Graph Controls</span>
 
-                  {/* Toggle row helper */}
                   {[
                     { label: 'Area shading', value: showArea, set: setShowArea },
                     { label: 'Tangent line', value: showTangent, set: setShowTangent },
                     { label: 'Derivative f′(x)', value: showDerivative, set: setShowDerivative },
                     { label: 'Grid', value: showGrid, set: setShowGrid },
-                    { label: 'Volume of Revolution (around X-axis)', value: showVolumeRev, set: setShowVolumeRev },
+                    { label: 'Volume of Revolution', value: showVolumeRev, set: setShowVolumeRev },
                   ].map(({ label, value, set }) => (
                     <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
                       <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
@@ -394,7 +427,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={xRangeMinInput}
                         onChange={e => {
                           setXRangeMinInput(e.target.value)
@@ -408,7 +441,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={xRangeMaxInput}
                         onChange={e => {
                           setXRangeMaxInput(e.target.value)
@@ -428,7 +461,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 70, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 70 }}
                         value={markedXInput}
                         onChange={e => {
                           setMarkedXInput(e.target.value)
@@ -449,22 +482,50 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Riemann sum */}
+                {/* B1: Riemann bounds inputs */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Riemann Bounds</span>
+                  <div style={{ padding: '4px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      className={styles.curveExprInput}
+                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
+                      value={riemannBoundsLo}
+                      onChange={e => setRiemannBoundsLo(e.target.value)}
+                      placeholder="0"
+                      aria-label="Riemann lower bound"
+                    />
+                    <span className={styles.areaLabel}>to</span>
+                    <input
+                      type="number"
+                      className={styles.curveExprInput}
+                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
+                      value={riemannBoundsHi}
+                      onChange={e => setRiemannBoundsHi(e.target.value)}
+                      placeholder="4"
+                      aria-label="Riemann upper bound"
+                    />
+                  </div>
+                </div>
+
+                {/* U1: Riemann sum — wired with onSumResult */}
                 <RiemannControls
                   exprStr={activeEq.expr}
-                  bounds={[0, 4]}
+                  bounds={riemannBounds}
                   onRectangles={setRiemannRects}
+                  onSumResult={setRiemannSumResult}
                 />
 
-                {/* Region / integration order */}
+                {/* U6: Region / integration order — wired with onRegionData */}
                 <RegionToggle
+                  curves={graphEquations}
                   onRegionData={(data) => setRegionVertices(data.region_vertices ?? null)}
                 />
 
               </aside>
             )}
 
-            {/* ── Left sidebar: 3D controls & limit settings ── */}
+            {/* ── Left sidebar: 3D controls & limit settings (U3: fully restored) ── */}
             {graphMode === '3d' && (
               <aside className={styles.graphSidebar}>
                 {/* 3D Equation */}
@@ -488,11 +549,11 @@ export default function App() {
                 <div className={styles.curveListSection}>
                   <span className={styles.sidebarSectionLabel}>Graph Controls</span>
                   {[
-                    { label: 'Tangent line / plane', value: showTangent3D, set: setShowTangent3D },
-                    { label: 'Derivative f′(x)', value: showDerivative3D, set: setShowDerivative3D },
+                    { label: 'Tangent plane', value: showTangent3D, set: setShowTangent3D },
+                    { label: 'Derivative slices', value: showDerivative3D, set: setShowDerivative3D },
                     { label: '3D Grid', value: showGrid3D, set: setShowGrid3D },
                     { label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
-                    { label: 'Volume under surface (∬ z dA)', value: showVolume3D, set: setShowVolume3D },
+                    { label: 'Volume under surface', value: showVolume3D, set: setShowVolume3D },
                   ].map(({ label, value, set }) => (
                     <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
                       <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
@@ -505,18 +566,18 @@ export default function App() {
                   ))}
                 </div>
 
-                {/* 3D Limit Settings */}
+                {/* 3D Axis Limits */}
                 <div className={styles.curveListSection}>
                   <span className={styles.sidebarSectionLabel}>3D Axis Limits</span>
 
-                  {/* X domain limits */}
+                  {/* X domain */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span className={styles.areaLabel}>X range [-6 to 6]</span>
+                    <span className={styles.areaLabel}>X range</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={xMin3DInput}
                         onChange={e => {
                           setXMin3DInput(e.target.value)
@@ -530,7 +591,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={xMax3DInput}
                         onChange={e => {
                           setXMax3DInput(e.target.value)
@@ -543,14 +604,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Y domain limits */}
+                  {/* Y domain */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                    <span className={styles.areaLabel}>Y range [-6 to 6]</span>
+                    <span className={styles.areaLabel}>Y range</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={yMin3DInput}
                         onChange={e => {
                           setYMin3DInput(e.target.value)
@@ -564,7 +625,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={yMax3DInput}
                         onChange={e => {
                           setYMax3DInput(e.target.value)
@@ -577,14 +638,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Z limits */}
+                  {/* Z clamp limits */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                    <span className={styles.areaLabel}>Z limits [z_min, z_max] (optional)</span>
+                    <span className={styles.areaLabel}>Z limits (optional)</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={zMin3DInput}
                         onChange={e => {
                           setZMin3DInput(e.target.value)
@@ -598,7 +659,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={zMax3DInput}
                         onChange={e => {
                           setZMax3DInput(e.target.value)
@@ -611,14 +672,14 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Mark point (x, y) */}
+                  {/* Mark point (x0, y0) */}
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
                     <span className={styles.areaLabel}>Mark point (x, y)</span>
                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={markedX3DInput}
                         onChange={e => {
                           setMarkedX3DInput(e.target.value)
@@ -631,7 +692,7 @@ export default function App() {
                       <input
                         type="number"
                         className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52, borderRadius: 2 }}
+                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
                         value={markedY3DInput}
                         onChange={e => {
                           setMarkedY3DInput(e.target.value)
@@ -655,12 +716,12 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3D Riemann Grid Resolution (n) & Sampling */}
+                {/* V8: Renamed from "Riemann Grid Resolution" to "Surface Resolution" */}
                 <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>Riemann Grid Resolution (n)</span>
+                  <span className={styles.sidebarSectionLabel}>Surface Resolution (n)</span>
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className={styles.areaLabel}>n = {n3D} sub-intervals</span>
+                      <span className={styles.areaLabel}>n = {n3D} segments</span>
                     </div>
                     <input
                       type="range"
@@ -670,7 +731,7 @@ export default function App() {
                       value={n3D}
                       onChange={e => setN3D(parseInt(e.target.value, 10))}
                       style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
-                      aria-label="3D Riemann sub-intervals n"
+                      aria-label="3D surface segments n"
                     />
                     <div style={{ display: 'flex', gap: 4 }}>
                       {['left', 'midpoint', 'right'].map(s => (
@@ -717,6 +778,8 @@ export default function App() {
                     markedX={markedX}
                     xRangeMin={xRangeMin}
                     xRangeMax={xRangeMax}
+                    areaValue={areaValue}
+                    onAreaValue={setAreaValue}
                   />
 
                   {activeEq.numericSample?.length > 0 && (

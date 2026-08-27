@@ -34,7 +34,7 @@ const CURVE_COLORS_DARK  = [0xe8e6e1, 0x60a5fa, 0xf87171, 0x4ade80, 0xfbbf24, 0x
 
 function isDark() { return document.documentElement.getAttribute('data-theme') === 'dark' }
 function bgColor()    { return isDark() ? 0x111110 : 0xfafaf9 }
-function axColor()    { return isDark() ? 0x94a3b8 : 0x334155 }  // bold crisp axis
+function axColor()    { return isDark() ? 0x94a3b8 : 0x334155 }
 function gridColor()  { return isDark() ? 0x1e1d1b : 0xeeecea }
 function curveColors(){ return isDark() ? CURVE_COLORS_DARK : CURVE_COLORS_LIGHT }
 function areaColor()  { return isDark() ? 0x60a5fa : 0x2563eb }
@@ -84,7 +84,6 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
   const hx = hoverInfo ? ((hoverInfo.wx - xL) / (xR - xL)) * canvasW : null
   const hy = hoverInfo ? canvasH - ((hoverInfo.wy - yB) / (yT - yB)) * canvasH : null
 
-  // Coordinates of origin (0, 0)
   const x0Px = ((0 - xL) / (xR - xL)) * canvasW
   const y0Py = canvasH - ((0 - yB) / (yT - yB)) * canvasH
   const pyClamped = Math.max(20, Math.min(canvasH - 24, y0Py))
@@ -92,7 +91,6 @@ function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
 
   return (
     <div className={styles.tickLayer} style={{ width: canvasW, height: canvasH }}>
-      {/* ── Bold Axis Labels: +x, -x, +y, -y ── */}
       <span className={styles.axisLabel} style={{ right: 8, top: pyClamped - 10 }}>+x</span>
       <span className={styles.axisLabel} style={{ left: 8, top: pyClamped - 10 }}>-x</span>
       <span className={styles.axisLabel} style={{ left: pxClamped - 10, top: 8 }}>+y</span>
@@ -232,6 +230,7 @@ export default function GraphCanvas2D({
   showArea = false,
   showVolumeRev = false,
   areaValue = null,
+  onAreaValue = null,
   regionVertices = null,
   showTangent = true,
   showDerivative = false,
@@ -345,8 +344,10 @@ export default function GraphCanvas2D({
       line.geometry.setDrawRange(0, cnt)
     })
 
-    // Volume of revolution numerical calculation
+    // Active curve expression
     const activeExpr = curveLinesRef.current[activeCurveIndex]?.expr || curveLinesRef.current[0]?.expr
+
+    // Volume of revolution numerical calculation
     if (activeExpr) {
       const pts = sample1D(activeExpr, xL, xR, 200, extraVars)
       const dx = (xR - xL) / (pts.length || 1)
@@ -354,7 +355,22 @@ export default function GraphCanvas2D({
       pts.forEach(p => { if (isFinite(p.y)) sumY2 += p.y * p.y })
       setVolRevVal(Math.PI * sumY2 * dx)
     }
-  }, [extraVars, activeCurveIndex])
+
+    // Area numerical calculation (V3)
+    if (activeExpr && showArea) {
+      const pts1 = sample1D(activeExpr, xL, xR, 200, extraVars)
+      const secondExpr = equations.length >= 2 && activeCurveIndex === 0 ? equations[1]?.expr : null
+      const pts2 = secondExpr ? sample1D(secondExpr, xL, xR, 200, extraVars) : null
+      const dx = (xR - xL) / (pts1.length || 1)
+      let sumArea = 0
+      pts1.forEach((p, i) => {
+        const y1 = p.y || 0
+        const y2 = pts2?.[i]?.y || 0
+        sumArea += Math.abs(y1 - y2)
+      })
+      onAreaValue?.(sumArea * dx)
+    }
+  }, [extraVars, activeCurveIndex, showArea, equations, onAreaValue])
 
   const buildStaticGeo = useCallback(() => {
     const scene = sceneRef.current; if (!scene) return
@@ -363,7 +379,7 @@ export default function GraphCanvas2D({
     axisRefs.current = []; gridRefs.current = []
     const [xL, xR, yB, yT] = getViewBounds()
 
-    // ── BOLD AXES: Using thin mesh rectangles + line for crisp rendering ──
+    // ── BOLD AXES: Using thin mesh rectangles for crisp rendering ──
     const axMatPlane = new THREE.MeshBasicMaterial({ color: axColor(), depthWrite: false })
     const thick = Math.max((yT - yB) * 0.003, 0.02)
 
@@ -374,8 +390,6 @@ export default function GraphCanvas2D({
     scene.add(xAxMesh); axisRefs.current.push(xAxMesh)
 
     // Bold Y Axis
-    // The orthographic camera already preserves equal world-unit scaling in
-    // both directions. Reusing `thick` makes both axes the same visual width.
     const yAxGeo = new THREE.PlaneGeometry(thick, yT - yB)
     const yAxMesh = new THREE.Mesh(yAxGeo, axMatPlane)
     yAxMesh.position.set(0, (yB + yT) / 2, 0.001)
@@ -420,6 +434,8 @@ export default function GraphCanvas2D({
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
+    // B6: initialize camera projection before building static geometry
+    rebuildCamera()
     buildStaticGeo()
 
     // Tangent line
@@ -522,6 +538,7 @@ export default function GraphCanvas2D({
       const curves = curveLinesRef.current
       if (!curves.length) { setHoverInfo(null); return }
 
+      // B12: Snapping hover to nearest curve among all curves
       let bestExpr = null
       let bestDist  = Infinity
       curves.forEach(({ expr }) => {
@@ -750,7 +767,7 @@ export default function GraphCanvas2D({
 
     resampleAll()
 
-    // ── Area Shading Mesh ──
+    // ── B5: Area Shading Mesh — uses active curve ──
     if (!showArea || equations.length < 1) {
       if (areaMeshRef.current) {
         scene.remove(areaMeshRef.current)
@@ -760,11 +777,12 @@ export default function GraphCanvas2D({
       }
     } else {
       const [xL, xR] = getViewBounds()
-      const expr2 = equations.length >= 2 ? equations[1].expr : null
+      const primaryExpr = equations[activeCurveIndex]?.expr || equations[0]?.expr
+      const expr2 = (equations.length >= 2 && activeCurveIndex === 0) ? equations[1].expr : null
       if (areaMeshRef.current) {
-        buildAreaMesh(equations[0].expr, expr2, xL, xR, extraVars, areaMeshRef.current)
+        buildAreaMesh(primaryExpr, expr2, xL, xR, extraVars, areaMeshRef.current)
       } else {
-        const am = buildAreaMesh(equations[0].expr, expr2, xL, xR, extraVars)
+        const am = buildAreaMesh(primaryExpr, expr2, xL, xR, extraVars)
         scene.add(am)
         areaMeshRef.current = am
       }
@@ -914,7 +932,7 @@ export default function GraphCanvas2D({
           )}
           {showVolumeRev && volRevVal != null && (
             <span className={styles.volumeRevBadge} title="Volume of solid of revolution (around X-axis: π∫y² dx)">
-              V_rev ≈ {volRevVal.toFixed(2)}
+              π·∫y² dx ≈ {volRevVal.toFixed(2)}
             </span>
           )}
           {hoverInfo && (

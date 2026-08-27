@@ -13,7 +13,9 @@ See ARCHITECTURE.md §3.
 """
 import json
 import logging
+import math
 import os
+import time
 import sympy
 from sympy.core.sympify import SympifyError
 from sympy import (
@@ -25,6 +27,7 @@ from sympy import (
 )
 
 from safe_parse import safe_parse, ExpressionError
+from computation_guard import ComputationTimeout, calculation_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -42,13 +45,15 @@ _MODEL_PREFERENCE = (
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
 )
+GEMINI_REQUEST_TIMEOUT_MS = 7_000
+GEMINI_MAX_OUTPUT_TOKENS = 512
 
 # ── Narration templates ─────────────────────────────────────────────────────
 _NARRATION = {
     "constant":             "Since this expression has no {wrt}, its derivative is 0.",
     "power_rule":           "Power Rule: bring the exponent down as a coefficient, then decrease the exponent by 1.",
     "product_rule":         "Product Rule: d/d{wrt}[u·v] = u·(dv/d{wrt}) + v·(du/d{wrt}).",
-    "quotient_rule":        "Quotient Rule: d/d{wrt}[u/v] = (v·u′ − u·v′) / v².",
+    "quotient_rule":        "Quotient Rule: d/d{wrt}[u/v] = (v·u' - u·v') / v².",
     "chain_rule":           "Chain Rule: differentiate the outer function, then multiply by the derivative of the inner function.",
     "sum_rule":             "Sum Rule: the derivative of each term is computed independently.",
     "constant_factor":      "Constant Multiple Rule: pull the constant coefficient outside the derivative.",
@@ -56,7 +61,7 @@ _NARRATION = {
     "exp_rule":             "The derivative of eˣ with respect to x is eˣ.",
     "log_rule":             "The derivative of ln(x) with respect to x is 1/x.",
     "u_substitution":       "Use u-substitution — let u equal the inner expression, then integrate with respect to u.",
-    "integration_by_parts": "Integration by Parts: ∫u dv = uv − ∫v du.",
+    "integration_by_parts": "Integration by Parts: ∫u dv = uv - ∫v du.",
     "power_rule_integral":  "Reverse Power Rule: increase the exponent by 1, then divide by the new exponent.",
     "trig_integral":        "Standard trigonometric integral identity.",
     "exp_integral":         "The integral of eˣ with respect to x is eˣ.",
@@ -110,7 +115,12 @@ def _gemini_narrate(
         # to the browser.
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            # A plain mapping keeps this compatible across supported
+            # google-genai 1.x releases while bounding a public request.
+            http_options={"timeout": GEMINI_REQUEST_TIMEOUT_MS},
+        )
 
         lines = [
             f"Step {i+1}: Rule={s['rule']}. Before={s['before_latex']}. After={s['after_latex']}."
@@ -128,8 +138,11 @@ def _gemini_narrate(
         model_not_found_error = None
         attempted_models = []
         candidate_models = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
+        narration_deadline = time.monotonic() + (GEMINI_REQUEST_TIMEOUT_MS / 1000)
 
         while candidate_models:
+            if time.monotonic() >= narration_deadline:
+                raise TimeoutError("Gemini narration exceeded its time budget.")
             candidate_model = candidate_models.pop(0)
             if candidate_model in attempted_models:
                 continue
@@ -138,7 +151,11 @@ def _gemini_narrate(
                 response = client.models.generate_content(
                     model=candidate_model,
                     contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json"),
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                        temperature=0,
+                    ),
                 )
                 selected_model = candidate_model
                 break
@@ -559,8 +576,18 @@ def handle(body: dict) -> dict:
 
     try:
         if operation == "derivative":
-            order  = max(1, min(int(body.get("order", 1)), 5))
-            result, steps = _derivative_steps(expr, wrt, order)
+            order_raw = body.get("order", 1)
+            if isinstance(order_raw, bool):
+                return _error("malformed_request", "'order' must be an integer.", 400)
+            try:
+                order_number = float(order_raw)
+                if not math.isfinite(order_number) or not order_number.is_integer():
+                    raise ValueError
+                order = max(1, min(int(order_number), 5))
+            except (TypeError, ValueError, OverflowError):
+                return _error("malformed_request", "'order' must be an integer.", 400)
+            with calculation_timeout(12):
+                result, steps = _derivative_steps(expr, wrt, order)
         else:
             bounds = body.get("bounds", None)
             if bounds is not None:
@@ -572,11 +599,12 @@ def handle(body: dict) -> dict:
                     if not isinstance(b, (int, float)) or isinstance(b, bool):
                         return _error("malformed_request",
                                       f"bounds[{i}] must be a number, got {type(b).__name__}.", 400)
-                    if b != b:  # NaN check
-                        return _error("malformed_request", f"bounds[{i}] is NaN.", 400)
+                    if not math.isfinite(b):
+                        return _error("malformed_request", f"bounds[{i}] must be finite.", 400)
                     validated_bounds.append(b)
                 bounds = validated_bounds
-            result, steps = _integral_steps(expr, wrt, bounds)
+            with calculation_timeout(12):
+                result, steps = _integral_steps(expr, wrt, bounds)
 
         narration = {}
         steps  = _gemini_narrate(steps, wrt_str, narration)
@@ -593,7 +621,11 @@ def handle(body: dict) -> dict:
             }),
         }
 
-    except SympifyError as e:
-        return _error("invalid_expression", f"SymPy error: {e}")
-    except Exception as e:
-        return _error("internal_error", f"Unexpected error: {e}", 500)
+    except ComputationTimeout:
+        return _error("computation_timeout",
+                      "This expression is too complex to solve within the time limit.", 504)
+    except SympifyError:
+        return _error("invalid_expression", "SymPy could not evaluate this expression.")
+    except Exception:
+        logger.exception("Unhandled /solve calculation failure.")
+        return _error("internal_error", "The service could not process this request.", 500)

@@ -2,6 +2,7 @@
  * StepPanel — step-by-step solution with KaTeX + substeps + Gemini narration.
  * Each step is collapsible. Substeps show rule details inline.
  * Steps animate in with stagger.
+ * Includes Copy LaTeX button for result (U5).
  */
 import React, { useState } from 'react'
 import katex from 'katex'
@@ -11,7 +12,13 @@ export function KatexDisplay({ latex, block = false }) {
   if (!latex) return null
   let html = ''
   try {
-    html = katex.renderToString(latex, { displayMode: block, throwOnError: false, strict: false })
+    html = katex.renderToString(latex, {
+      displayMode: block,
+      throwOnError: false,
+      strict: false,
+      trust: false,
+      maxExpand: 1000,
+    })
   } catch {
     return <span className={styles.rawLatex}>{latex}</span>
   }
@@ -105,6 +112,15 @@ function StepItem({ step, index }) {
 
 export default function StepPanel({ result, steps = [], loading, error, isLocal }) {
   const isEmpty = !loading && !result && steps.length === 0 && !error
+  const [copied, setCopied] = useState(false)
+
+  const copyResult = () => {
+    if (!result) return
+    navigator.clipboard?.writeText(result).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
 
   return (
     <div className={styles.wrapper}>
@@ -155,7 +171,18 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
 
       {result && !loading && (
         <div className={styles.resultBox}>
-          <span className={styles.resultLabel}>Result</span>
+          <div className={styles.resultHeader}>
+            <span className={styles.resultLabel}>Result</span>
+            <button
+              type="button"
+              className={styles.copyBtn}
+              onClick={copyResult}
+              aria-label="Copy LaTeX result"
+              title="Copy LaTeX result"
+            >
+              {copied ? 'Copied!' : 'Copy LaTeX'}
+            </button>
+          </div>
           <div className={styles.resultLatex}>
             <KatexDisplay latex={result} block />
           </div>

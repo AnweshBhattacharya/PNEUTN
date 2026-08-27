@@ -46,6 +46,8 @@ export default function EquationPreview({
           displayMode: true,
           throwOnError: true,
           strict: false,
+          trust: false,
+          maxExpand: 1000,
         }),
         error: null,
       }
@@ -57,6 +59,8 @@ export default function EquationPreview({
             displayMode: true,
             throwOnError: false,
             strict: false,
+            trust: false,
+            maxExpand: 1000,
           }),
           error: null,
         }

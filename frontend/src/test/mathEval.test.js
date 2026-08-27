@@ -27,6 +27,21 @@ describe('mathEval', () => {
       const divZero = compileExpr('1 / x')
       expect(evalAt(divZero, { x: 0 })).toBeNull()
     })
+
+    it('rejects expression-language mutation and parsing functions', () => {
+      expect(compileExpr('import("foo")')).toBeNull()
+      expect(compileExpr('createUnit("x")')).toBeNull()
+      expect(compileExpr('evaluate("2 + 2")')).toBeNull()
+      expect(compileExpr('a = 2')).toBeNull()
+    })
+
+    it('keeps supported spaced function input and graph parameters working', () => {
+      const trig = compileExpr('s i n(x)')
+      expect(evalAt(trig, { x: Math.PI / 2 })).toBeCloseTo(1, 5)
+
+      const parameterized = compileExpr('a * x')
+      expect(evalAt(parameterized, { x: 3, a: 2 })).toBe(6)
+    })
   })
 
   describe('sample1D', () => {

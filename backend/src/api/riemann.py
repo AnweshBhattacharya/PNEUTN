@@ -9,10 +9,15 @@ See API_SPEC.md for the exact request/response shape.
 See SECURITY_POLICY.md §2 for the sub-interval cap (200 max).
 """
 import json
+import logging
+import math
 import sympy
 from sympy import symbols, integrate, latex
 
 from safe_parse import safe_parse, ExpressionError
+from computation_guard import ComputationTimeout, calculation_timeout
+
+logger = logging.getLogger(__name__)
 
 
 def _error(code: str, message: str, status: int = 422) -> dict:
@@ -41,7 +46,7 @@ def handle(body: dict) -> dict:
     # --- Validate ---
     if not expr_str:
         return _error("malformed_request", "Field 'expr' is required.", 400)
-    if not bounds or len(bounds) != 2:
+    if not isinstance(bounds, list) or len(bounds) != 2:
         return _error("malformed_request", "Field 'bounds' must be [a, b].", 400)
     if n_raw is None:
         return _error("malformed_request", "Field 'sub_intervals' is required.", 400)
@@ -51,8 +56,11 @@ def handle(body: dict) -> dict:
     try:
         a = float(bounds[0])
         b = float(bounds[1])
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return _error("malformed_request", "Bounds must be numbers.", 400)
+
+    if not math.isfinite(a) or not math.isfinite(b):
+        return _error("malformed_request", "Bounds must be finite numbers.", 400)
 
     if a >= b:
         return _error("malformed_request", "bounds[0] must be less than bounds[1].", 400)
@@ -64,7 +72,7 @@ def handle(body: dict) -> dict:
             return _error("malformed_request",
                           "'sub_intervals' must be an integer.", 400)
         n = max(1, min(int(n_float), 200))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return _error("malformed_request",
                       "'sub_intervals' must be an integer.", 400)
 
@@ -78,39 +86,44 @@ def handle(body: dict) -> dict:
 
     try:
         # Build rectangle data
-        dx = (b - a) / n
-        rectangles = []
-        riemann_sum = 0.0
+        with calculation_timeout(12):
+            dx = (b - a) / n
+            rectangles = []
+            riemann_sum = 0.0
 
-        for i in range(n):
-            x0 = a + i * dx
-            x1 = x0 + dx
+            for i in range(n):
+                x0 = a + i * dx
+                x1 = x0 + dx
 
-            if sample_point == "left":
-                sample_x = x0
-            elif sample_point == "right":
-                sample_x = x1
-            else:  # midpoint
-                sample_x = (x0 + x1) / 2
+                if sample_point == "left":
+                    sample_x = x0
+                elif sample_point == "right":
+                    sample_x = x1
+                else:  # midpoint
+                    sample_x = (x0 + x1) / 2
 
+                try:
+                    height = float(expr.subs(x, sample_x).evalf())
+                    if not math.isfinite(height):
+                        height = 0.0
+                except Exception:
+                    height = 0.0
+
+                rectangles.append({
+                    "x0": round(x0, 8),
+                    "x1": round(x1, 8),
+                    "height": round(height, 8),
+                })
+                riemann_sum += height * dx
+
+            # Compute exact definite integral
             try:
-                height = float(expr.subs(x, sample_x).evalf())
+                exact_sym = integrate(expr, (x, a, b))
+                exact_value = float(exact_sym.evalf())
+                if not math.isfinite(exact_value):
+                    exact_value = None
             except Exception:
-                height = 0.0
-
-            rectangles.append({
-                "x0": round(x0, 8),
-                "x1": round(x1, 8),
-                "height": round(height, 8),
-            })
-            riemann_sum += height * dx
-
-        # Compute exact definite integral
-        try:
-            exact_sym = integrate(expr, (x, a, b))
-            exact_value = float(exact_sym.evalf())
-        except Exception:
-            exact_value = None
+                exact_value = None
 
         return {
             "statusCode": 200,
@@ -122,5 +135,9 @@ def handle(body: dict) -> dict:
             }),
         }
 
-    except Exception as e:
-        return _error("internal_error", f"Unexpected error: {e}", 500)
+    except ComputationTimeout:
+        return _error("computation_timeout",
+                      "This expression is too complex to solve within the time limit.", 504)
+    except Exception:
+        logger.exception("Unhandled /riemann calculation failure.")
+        return _error("internal_error", "The service could not process this request.", 500)

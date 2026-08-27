@@ -6,12 +6,83 @@
  *
  * math.js is loaded lazily to avoid blocking the initial render.
  */
-import * as mathjs from 'mathjs'
+import { all, create } from 'mathjs'
+import { normaliseMathExpression } from './mathInput'
+
+// The graph compiler receives user input, so do not expose the whole math.js
+// expression language. This follows math.js's security guidance while keeping
+// the calculus syntax supported by the backend and graph controls.
+const math = create(all)
+const parseExpression = math.parse
+
+math.import({
+  import: () => { throw new Error('Function import is disabled') },
+  createUnit: () => { throw new Error('Function createUnit is disabled') },
+  reviver: () => { throw new Error('Function reviver is disabled') },
+  evaluate: () => { throw new Error('Function evaluate is disabled') },
+  parse: () => { throw new Error('Function parse is disabled') },
+  simplify: () => { throw new Error('Function simplify is disabled') },
+  derivative: () => { throw new Error('Function derivative is disabled') },
+  resolve: () => { throw new Error('Function resolve is disabled') },
+}, { override: true })
+
+const SAFE_CHARACTERS = /^[0-9a-zA-Z\s+\-*/^().,]+$/
+const ALLOWED_FUNCTIONS = new Set([
+  'sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
+  'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+  'asinh', 'acosh', 'atanh', 'abs', 'sign',
+])
+const ALLOWED_OPERATORS = new Set(['+', '-', '*', '/', '^'])
+
+function normaliseForEvaluation(exprStr) {
+  return normaliseMathExpression(exprStr)
+    .replace(/\bAbs\s*(?=\()/g, 'abs')
+}
+
+function isAllowedSymbol(name) {
+  // Single-letter variables retain support for graph parameter sliders, while
+  // blocking math.js namespace names such as `import` and `createUnit`.
+  return /^[a-zA-Z]$/.test(name) || name === 'pi' || name === 'E'
+}
+
+function validateNode(node) {
+  switch (node.type) {
+    case 'ConstantNode':
+      return
+    case 'SymbolNode':
+      if (!isAllowedSymbol(node.name)) throw new Error('Disallowed symbol')
+      return
+    case 'ParenthesisNode':
+      validateNode(node.content)
+      return
+    case 'OperatorNode':
+      if (!ALLOWED_OPERATORS.has(node.op)) throw new Error('Disallowed operator')
+      node.args.forEach(validateNode)
+      return
+    case 'FunctionNode':
+      if (!ALLOWED_FUNCTIONS.has(node.name)) throw new Error('Disallowed function')
+      node.args.forEach(validateNode)
+      return
+    default:
+      // Assignment, accessors, matrices, ranges, blocks, and function
+      // definitions are outside the calculator grammar and are rejected.
+      throw new Error(`Disallowed expression node: ${node.type}`)
+  }
+}
+
+function parseSafeExpression(exprStr) {
+  if (typeof exprStr !== 'string' || exprStr.length > 200 || !SAFE_CHARACTERS.test(exprStr)) {
+    throw new Error('Invalid expression')
+  }
+  const node = parseExpression(normaliseForEvaluation(exprStr))
+  validateNode(node)
+  return node
+}
 
 /** Compile a math expression string once, returns a reusable evaluator. */
 export function compileExpr(exprStr) {
   try {
-    return mathjs.compile(exprStr)
+    return parseSafeExpression(exprStr).compile()
   } catch {
     return null
   }
@@ -26,7 +97,10 @@ export function compileExpr(exprStr) {
 export function evalAt(compiled, scope) {
   if (!compiled) return null
   try {
-    const result = compiled.evaluate(scope)
+    const safeScope = new Map(Object.entries(scope || {}))
+    safeScope.set('pi', Math.PI)
+    safeScope.set('E', Math.E)
+    const result = compiled.evaluate(safeScope)
     if (typeof result !== 'number' || !isFinite(result)) return null
     return result
   } catch {

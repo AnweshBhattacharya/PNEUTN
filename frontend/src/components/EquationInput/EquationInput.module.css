@@ -1,4 +1,4 @@
-/* EquationInput.module.css */
+/* EquationInput.module.css — RawBlock minimalist design */
 
 .wrapper {
   padding: var(--sp-3) var(--sp-4);
@@ -52,7 +52,7 @@
   width: 100%;
   min-height: 56px;
   border: 1px solid var(--border-color) !important;
-  border-radius: var(--radius-sm) !important;
+  border-radius: 0 !important;
   background: var(--surface-sunken) !important;
   font-family: var(--font-mono) !important;
   font-size: 18px !important;
@@ -67,7 +67,6 @@
 .mathField:focus-within {
   border-color: var(--accent) !important;
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-muted) !important;
 }
 
 /* ── Error hint ── */
@@ -77,7 +76,7 @@
   color: var(--color-error);
   padding: var(--sp-1) var(--sp-2);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
 }
 
@@ -86,10 +85,9 @@
   list-style: none;
   background: var(--surface-raised);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   margin: 0;
   padding: var(--sp-1);
-  box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -101,7 +99,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 6px var(--sp-2);
-  border-radius: calc(var(--radius-sm) - 2px);
+  border-radius: 0;
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out);
 }
@@ -132,7 +130,6 @@
   border-top: 1px solid var(--border-color);
 }
 
-/* Two control groups side-by-side on one row */
 .controlRow {
   display: flex;
   gap: var(--sp-3);
@@ -151,57 +148,61 @@
 .controlLabel {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
-  text-transform: uppercase;
   letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
   color: var(--content-tertiary);
 }
 
-/* ── Pill toggle group (replaces select / radio) ── */
+/* ── Pill toggle group ── */
 .pillGroup {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--surface-sunken);
 }
 
 .pill {
+  flex: 1;
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
-  letter-spacing: 0.04em;
-  padding: 5px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+  letter-spacing: var(--tracking-chip);
+  padding: 6px var(--sp-2);
+  border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    border-color var(--duration-fast) var(--ease-out);
-  user-select: none;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+  text-align: center;
+}
+.pill + .pill {
+  border-left: 1px solid var(--border-color);
 }
 .pill:hover:not(.pillActive) {
   background: var(--surface-hover);
   color: var(--content-primary);
-  border-color: var(--content-tertiary);
 }
 .pillActive {
   background: var(--content-primary);
   color: var(--surface-base);
-  border-color: var(--content-primary);
+  font-weight: 700;
 }
 
-/* ── Order stepper ── */
+/* ── Stepper ── */
 .stepperRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
 }
 
 .stepperBtn {
   width: 28px;
   height: 28px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-raised);
   color: var(--content-secondary);
   cursor: pointer;
@@ -239,7 +240,6 @@
 }
 
 .toggle {
-  /* iOS-style toggle switch */
   position: relative;
   display: inline-block;
   width: 36px;
@@ -273,7 +273,8 @@
   border-radius: 50%;
   transition: transform var(--duration-fast) var(--ease-out);
   pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  box-shadow: none;
+  border: 1px solid var(--border-color);
 }
 .toggle input:checked ~ .toggleThumb {
   transform: translateX(16px);
@@ -301,7 +302,7 @@
   width: 72px;
   padding: 6px 10px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-sunken);
   color: var(--content-primary);
   transition: border-color var(--duration-fast);
@@ -309,7 +310,6 @@
 .boundInput:focus {
   border-color: var(--accent);
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .boundSep {
@@ -352,15 +352,14 @@
   text-transform: uppercase;
   padding: 12px var(--sp-4);
   border: 1px solid var(--content-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--content-primary);
   color: var(--surface-base);
   cursor: pointer;
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+    transform var(--duration-fast) var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -369,7 +368,6 @@
 .solveBtn:hover:not(:disabled) {
   background: var(--content-secondary);
   border-color: var(--content-secondary);
-  box-shadow: var(--shadow-md);
 }
 .solveBtn:active:not(:disabled) {
   transform: scale(0.98);

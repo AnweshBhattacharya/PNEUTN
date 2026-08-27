@@ -1,6 +1,7 @@
 /**
  * RegionToggle — order-of-integration toggle for two-curve bounded regions.
  * Uses pill toggles instead of dropdowns. Collapsible panel.
+ * Supports curves prop to easily populate from active equations list (U2).
  */
 import React, { useState, useRef } from 'react'
 import katex from 'katex'
@@ -8,8 +9,8 @@ import { integralOrder } from '../../lib/apiClient'
 import LoadingBar from '../shared/LoadingBar'
 import styles from './RegionToggle.module.css'
 
-export default function RegionToggle({ onRegionData }) {
-  const [open, setOpen] = useState(false) // collapsed by default to reduce noise
+export default function RegionToggle({ curves = [], onRegionData }) {
+  const [open, setOpen] = useState(false)
   const [curveUpper, setCurveUpper] = useState('x')
   const [curveLower, setCurveLower] = useState('x^2')
   const [order, setOrder] = useState('dy_dx')
@@ -45,10 +46,18 @@ export default function RegionToggle({ onRegionData }) {
 
   const boundsHtml = result?.bounds_latex
     ? (() => {
-        try { return katex.renderToString(result.bounds_latex, { displayMode: true, throwOnError: false }) }
-        catch { return result.bounds_latex }
+        try {
+          return katex.renderToString(result.bounds_latex, {
+            displayMode: true,
+            throwOnError: false,
+            trust: false,
+            maxExpand: 1000,
+          })
+        } catch { return null }
       })()
     : null
+
+  const validCurves = curves.filter(c => c && c.expr)
 
   return (
     <div className={styles.wrapper}>
@@ -68,12 +77,35 @@ export default function RegionToggle({ onRegionData }) {
       {open && (
         <div id="region-toggle-body" className={styles.body}>
           <p className={styles.hint}>
-            Two curves as functions of x — region needs exactly two intersection points.
+            Two curves as functions of x — region needs intersection points.
           </p>
+
+          {validCurves.length >= 2 && (
+            <div className={styles.curveShortcuts}>
+              <span className={styles.label}>Use curve:</span>
+              {validCurves.slice(0, 4).map((c, i) => (
+                <button
+                  key={c.id || i}
+                  type="button"
+                  className={styles.curveChip}
+                  onClick={() => {
+                    if (curveUpper === c.expr) {
+                      setCurveLower(c.expr)
+                    } else {
+                      setCurveUpper(c.expr)
+                    }
+                  }}
+                  title={`Click to set as upper/lower curve: ${c.expr}`}
+                >
+                  {c.expr.length > 8 ? c.expr.slice(0, 8) + '…' : c.expr}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className={styles.curveRow}>
             <div className={styles.curveInput}>
-              <label className={styles.label} htmlFor="curve-upper">Upper curve y =</label>
+              <label className={styles.label} htmlFor="curve-upper">Upper y =</label>
               <input
                 id="curve-upper"
                 type="text"
@@ -84,7 +116,7 @@ export default function RegionToggle({ onRegionData }) {
               />
             </div>
             <div className={styles.curveInput}>
-              <label className={styles.label} htmlFor="curve-lower">Lower curve y =</label>
+              <label className={styles.label} htmlFor="curve-lower">Lower y =</label>
               <input
                 id="curve-lower"
                 type="text"

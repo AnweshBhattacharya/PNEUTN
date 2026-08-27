@@ -1,11 +1,11 @@
-/* EquationPreview.module.css */
+/* EquationPreview.module.css — RawBlock minimalist design */
 
 .wrapper {
   position: relative;
   padding: var(--sp-3) var(--sp-4);
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   min-height: 56px;
   display: flex;
   align-items: center;
@@ -43,7 +43,7 @@
   color: var(--accent);
   background: var(--accent-muted);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -55,7 +55,6 @@
   width: 100%;
   overflow-x: auto;
   padding: 8px 0 0;
-  /* Fade in on every render */
   animation: previewFade 150ms var(--ease-out) both;
 }
 

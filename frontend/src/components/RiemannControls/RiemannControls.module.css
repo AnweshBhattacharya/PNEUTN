@@ -1,4 +1,4 @@
-/* RiemannControls.module.css — compact inline layout */
+/* RiemannControls.module.css — RawBlock compact inline layout */
 
 .wrapper {
   border-top: 1px solid var(--border-color);
@@ -69,7 +69,7 @@
   -webkit-appearance: none;
   height: 2px;
   background: var(--border-color);
-  border-radius: 1px;
+  border-radius: 0;
   cursor: pointer;
   outline: none;
 }
@@ -81,7 +81,7 @@
   border: 1px solid var(--surface-raised);
   cursor: pointer;
   border-radius: 50%;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
   transition: transform var(--duration-fast);
 }
 .slider::-webkit-slider-thumb:hover { transform: scale(1.15); }
@@ -104,7 +104,7 @@
   font-size: 9px;
   padding: 2px 7px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 0;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
@@ -134,7 +134,7 @@
   padding: 2px 6px;
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   flex: 1;
   min-width: 90px;
 }
@@ -159,5 +159,5 @@
   padding: var(--sp-1) var(--sp-2);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }

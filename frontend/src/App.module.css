@@ -1,9 +1,9 @@
-/* App.module.css — Pneutn redesign
+/* App.module.css — Pneutn redesign (RawBlock design system)
    Layout:
    ┌─────────────────────────────────────────────┐
    │  topBar (sticky, 48px)                      │
    ├─────────────────────────────────────────────┤
-   │  topRow (50/50 split, ~55vh)                │
+   │  topRow (50/50 split, ~52vh)                │
    │  ┌───────────────┬─────────────────────────┐│
    │  │ inputCol      │ solutionCol             ││
    │  │ (input+ctrl)  │ (steps cards)           ││
@@ -16,7 +16,7 @@
 /* ── Reset / base ─────────────────────────────────────────────────────── */
 .app {
   display: grid;
-  grid-template-rows: 48px auto 1fr;
+  grid-template-rows: 48px auto 1fr auto;
   grid-template-columns: 1fr;
   min-height: 100dvh;
   background: var(--surface-base);
@@ -65,7 +65,7 @@
   letter-spacing: 0.04em;
   padding: 4px 10px;
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: 0;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
@@ -91,7 +91,7 @@
   width: 30px;
   height: 30px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
@@ -204,7 +204,7 @@
   border: none; background: transparent;
   color: var(--content-tertiary);
   cursor: pointer; font-size: 14px; line-height: 1;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 0; transition: background var(--duration-fast), color var(--duration-fast);
   flex-shrink: 0;
@@ -264,23 +264,22 @@
   min-height: 0;
 }
 
-/* ── GRAPH SECTION (formerly bottomRow): full-width graph ──────────── */
+/* ── GRAPH SECTION: full-width graph ──────────── */
 .graphSection,
 .bottomRow {
   display: flex;
   flex-direction: column;
   overflow: visible;
+  flex: 1;
 }
 
 .bottomRowHeader {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: 6px var(--sp-3);
+  padding: 0;
   border-bottom: 1px solid var(--border-color);
-  background: var(--surface-sunken);
+  background: var(--surface-raised);
   flex-shrink: 0;
-  flex-wrap: wrap;
 }
 
 .bottomRowBody {
@@ -314,7 +313,6 @@
 /* ── Graph mode tabs ───────────────────────────────────────────────── */
 .graphTabs {
   display: flex;
-  border-bottom: 1px solid var(--border-color);
   background: var(--surface-raised);
   flex-shrink: 0;
 }
@@ -344,7 +342,7 @@
   font-weight: 700;
 }
 
-/* ── Curve list (sidebar) ──────────────────────────────────────────── */
+/* ── Curve list (sidebar) ──────────────────────────────────── */
 .curveListSection {
   padding: var(--sp-2) var(--sp-2);
   border-bottom: 1px solid var(--border-color);
@@ -367,7 +365,7 @@
   align-items: center;
   gap: var(--sp-1);
   padding: 4px var(--sp-1);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   cursor: pointer;
   transition: background var(--duration-fast);
   border: 1px solid transparent;
@@ -401,7 +399,7 @@
   color: var(--content-tertiary);
   cursor: pointer; font-size: 16px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: 0;
   flex-shrink: 0;
   transition: background var(--duration-fast), color var(--duration-fast);
@@ -415,7 +413,7 @@
   padding: 6px var(--sp-2);
   background: transparent;
   border: 1px dashed var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   color: var(--content-tertiary);
   cursor: pointer;
   text-align: center;
@@ -473,7 +471,8 @@
   width: 14px; height: 14px; background: #fff;
   border-radius: 50%; pointer-events: none;
   transition: transform var(--duration-fast);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: none;
+  border: 1px solid var(--border-color);
 }
 .toggle input:checked ~ .toggleThumb { transform: translateX(14px); }
 
@@ -540,7 +539,7 @@
   color: var(--content-secondary);
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: 2px 6px;
   white-space: nowrap;
 }
@@ -551,7 +550,7 @@
   font-size: 10px;
   background: var(--accent);
   color: #fff;
-  border-radius: 10px;
+  border-radius: 0;
   padding: 1px 7px;
   line-height: 18px;
 }
@@ -559,7 +558,7 @@
 .localBadge {
   font-size: 10px;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--color-warning) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   color: var(--color-warning);
@@ -580,12 +579,10 @@
 }
 
 /* ── Mobile panel visibility ───────────────────────────────────────── */
-/* On desktop: mobileHidden does nothing. On mobile: hides the element. */
 @media (max-width: 899px) {
   .mobileHidden { display: none !important; }
 }
 
-/* Solution column: always visible on desktop, hidden on mobile unless steps tab */
 .solutionColMobileHidden { /* no-op on desktop */ }
 
 @media (max-width: 899px) {
@@ -617,7 +614,7 @@
     width: 100%;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
-    max-height: 220px;
+    max-height: none;
   }
   .bottomRowBody { flex-direction: column; }
 }

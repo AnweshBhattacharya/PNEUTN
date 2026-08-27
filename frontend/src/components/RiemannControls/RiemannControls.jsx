@@ -1,8 +1,12 @@
 /**
  * RiemannControls — compact single-row layout.
  * Slider + sample point + results all in minimal vertical space.
+ *
+ * Bug fixes:
+ *   B2 — Auto-triggers fetchRiemann on mount so rectangles appear immediately
+ *   B9 — Clears sumData + error when exprStr or bounds prop changes (curve switch)
  */
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { riemann as callRiemann } from '../../lib/apiClient'
 import LoadingBar from '../shared/LoadingBar'
 import styles from './RiemannControls.module.css'
@@ -17,12 +21,14 @@ export default function RiemannControls({ exprStr, bounds = [0, 4], onRectangles
   const [error, setError] = useState(null)
   const [sumData, setSumData] = useState(null)
   const debounceRef = useRef(null)
+  // Track whether we have done the initial fetch
+  const didMountFetch = useRef(false)
 
-  const fetchRiemann = async (nVal, sp) => {
+  const fetchRiemann = async (nVal, sp, currentBounds) => {
     if (!exprStr) return
     setLoading(true); setError(null)
     try {
-      const data = await callRiemann({ expr: exprStr, bounds, sub_intervals: nVal, sample_point: sp })
+      const data = await callRiemann({ expr: exprStr, bounds: currentBounds ?? bounds, sub_intervals: nVal, sample_point: sp })
       onRectangles?.(data.rectangles)
       onSumResult?.({ riemann_sum: data.riemann_sum, exact_value: data.exact_value })
       setSumData(data)
@@ -30,14 +36,49 @@ export default function RiemannControls({ exprStr, bounds = [0, 4], onRectangles
     finally { setLoading(false) }
   }
 
+  // B2: Auto-trigger on mount (once exprStr is available)
+  useEffect(() => {
+    if (!exprStr) return
+    if (didMountFetch.current) return
+    didMountFetch.current = true
+    fetchRiemann(n, samplePoint, bounds)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exprStr])
+
+  // B9: Clear stale data when expression or bounds change (e.g. curve switch)
+  const prevExprRef = useRef(exprStr)
+  const prevBoundsRef = useRef(bounds)
+  useEffect(() => {
+    const exprChanged   = prevExprRef.current !== exprStr
+    const boundsChanged = prevBoundsRef.current[0] !== bounds[0] || prevBoundsRef.current[1] !== bounds[1]
+    prevExprRef.current   = exprStr
+    prevBoundsRef.current = bounds
+
+    if (exprChanged || boundsChanged) {
+      // Clear stale Riemann display immediately
+      setSumData(null)
+      setError(null)
+      onRectangles?.([])
+      // Re-fetch with new expr / bounds after a small settle delay
+      clearTimeout(debounceRef.current)
+      if (exprStr) {
+        debounceRef.current = setTimeout(() => {
+          didMountFetch.current = true
+          fetchRiemann(n, samplePoint, bounds)
+        }, 300)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exprStr, bounds[0], bounds[1]])
+
   const handleSliderChange = (e) => {
     const val = parseInt(e.target.value, 10)
     setN(val)
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => fetchRiemann(val, samplePoint), 350)
+    debounceRef.current = setTimeout(() => fetchRiemann(val, samplePoint, bounds), 350)
   }
 
-  const handleSampleChange = (sp) => { setSamplePoint(sp); fetchRiemann(n, sp) }
+  const handleSampleChange = (sp) => { setSamplePoint(sp); fetchRiemann(n, sp, bounds) }
 
   const errorAbs = sumData?.exact_value != null
     ? Math.abs(sumData.riemann_sum - sumData.exact_value) : null

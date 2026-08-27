@@ -11,6 +11,7 @@
  * deterministic template text (same as the backend's fallback_template path).
  */
 import * as math from 'mathjs'
+import { compileExpr } from './mathEval'
 
 // ── LaTeX helpers ─────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ const NARRATION = {
   sum_rule:             'The derivative of a sum equals the sum of the derivatives.',
   product_rule:         'Apply the Product Rule: d/dx[u·v] = u·v′ + v·u′.',
   chain_rule:           'Apply the Chain Rule: differentiate the outer function, then multiply by the inner derivative.',
+  trig_rule:            'Apply standard trigonometric derivative identity.',
+  exp_rule:             'The derivative of eˣ is eˣ.',
   power_rule_integral:  'Apply the Reverse Power Rule: increase the exponent by 1, then divide by the new exponent.',
   sum_rule_integral:    'The integral of a sum equals the sum of the integrals.',
   u_substitution:       'Use u-substitution to integrate the composite function.',
@@ -111,7 +114,9 @@ function detectDiffRule(node, wrt) {
   }
   if (node.type === 'FunctionNode') {
     if (node.args[0]?.toString() !== wrt) return 'chain_rule'
-    return 'power_rule'
+    if (['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sec', 'csc', 'cot', 'sinh', 'cosh', 'tanh'].includes(node.name)) return 'trig_rule'
+    if (['exp', 'log', 'ln'].includes(node.name)) return 'exp_rule'
+    return 'default'
   }
   return 'default'
 }
@@ -294,6 +299,11 @@ function numericSample(exprStr, wrt) {
  */
 export function localSolve({ expr, operation, wrt = 'x', order = 1, bounds = null }) {
   try {
+    // Keep offline mode inside the same expression grammar as the graph and
+    // backend. The raw math.js helpers below are used only after this guard.
+    if (!compileExpr(expr)) {
+      throw new Error('Enter a supported mathematical expression.')
+    }
     if (operation === 'derivative') {
       const { finalExpr, steps } = derivativeSteps(expr, wrt, order)
       return {

@@ -1,4 +1,4 @@
-/* RegionToggle.module.css — compact */
+/* RegionToggle.module.css — RawBlock compact design */
 
 .wrapper {
   border-top: 1px solid var(--border-color);
@@ -53,6 +53,29 @@
   color: var(--content-tertiary);
 }
 
+/* Curve selection shortcuts */
+.curveShortcuts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+.curveChip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: var(--surface-sunken);
+  color: var(--content-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.curveChip:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+}
+
 /* Curve inputs — two on one row */
 .curveRow {
   display: grid;
@@ -65,12 +88,12 @@
   font-size: 9px;
   padding: 4px 6px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-sunken);
   color: var(--content-primary);
   transition: border-color var(--duration-fast);
 }
-.input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--accent-muted); }
+.input:focus { border-color: var(--accent); outline: none; }
 
 /* Action row — button + order pills inline */
 .actionRow {
@@ -86,7 +109,7 @@
   text-transform: uppercase;
   padding: 4px 10px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-raised);
   color: var(--content-primary);
   cursor: pointer;
@@ -100,7 +123,7 @@
 .orderPills {
   display: flex;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   overflow: hidden;
 }
 .orderPill {
@@ -108,6 +131,7 @@
   font-size: 9px;
   padding: 3px 8px;
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
@@ -125,7 +149,7 @@
   gap: var(--sp-2);
   padding: 5px var(--sp-2);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-sunken);
 }
 .sweepAxis {
@@ -137,7 +161,7 @@
 .sweepStrips { display: flex; gap: 1px; height: 14px; flex: 1; }
 .strip {
   flex: 1;
-  border-radius: 1px;
+  border-radius: 0;
   background: var(--border-color);
   transition: background var(--duration-fast);
 }
@@ -154,7 +178,7 @@
   font-size: 10px;
   padding: 2px 6px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-sunken);
   color: var(--content-secondary);
 }
@@ -162,7 +186,7 @@
 .boundsBlock { display: flex; flex-direction: column; gap: 4px; }
 .latexRender {
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-sunken);
   overflow-x: auto;
@@ -176,5 +200,5 @@
   padding: var(--sp-1) var(--sp-2);
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }

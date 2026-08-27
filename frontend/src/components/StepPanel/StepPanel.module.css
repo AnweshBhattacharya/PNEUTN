@@ -1,4 +1,4 @@
-/* StepPanel.module.css */
+/* StepPanel.module.css — RawBlock minimalist design */
 
 .wrapper {
   background: var(--surface-base);
@@ -29,13 +29,14 @@
 .localBadge {
   font-size: 10px;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--color-warning) 15%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
   color: var(--color-warning);
   letter-spacing: 0.04em;
+  font-family: var(--font-mono);
 }
-.stepCount { color: var(--accent); font-weight: 700; }
+.stepCount { color: var(--accent); font-weight: 700; font-family: var(--font-mono); font-size: 10px; }
 
 /* ── Empty state ── */
 .empty {
@@ -77,7 +78,7 @@
   background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
   border-left: 3px solid var(--color-error);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0;
   animation: slideInLeft var(--duration-base) var(--ease-out) both;
 }
 @keyframes slideInLeft {
@@ -105,7 +106,7 @@
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--content-primary);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -115,6 +116,11 @@
   from { opacity: 0; transform: scale(0.97) translateY(6px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
+.resultHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .resultLabel {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
@@ -122,10 +128,24 @@
   text-transform: uppercase;
   color: var(--content-tertiary);
 }
+.copyBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  color: var(--content-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.copyBtn:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+}
 .resultLatex {
   overflow-x: auto;
   padding: var(--sp-1) 0;
-  /* Make result LaTeX render larger */
   font-size: 1.15em;
 }
 
@@ -141,11 +161,10 @@
 .step {
   background: var(--surface-raised);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   overflow: hidden;
-  /* Staggered slide-up animation driven by inline animationDelay */
   animation: stepSlideUp var(--duration-slow) var(--ease-out) both;
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  transition: border-color var(--duration-fast);
 }
 @keyframes stepSlideUp {
   from { opacity: 0; transform: translateY(12px); }
@@ -153,7 +172,6 @@
 }
 .step:hover {
   border-color: var(--border-medium, var(--content-tertiary));
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .stepHeader {
@@ -191,7 +209,7 @@
   letter-spacing: var(--tracking-chip);
   padding: 2px 8px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: 0;
   text-transform: capitalize;
   color: var(--content-secondary);
   background: var(--surface-sunken);
@@ -200,7 +218,7 @@
   font-family: var(--font-mono);
   font-size: 9px;
   padding: 2px 6px;
-  border-radius: 8px;
+  border-radius: 0;
   border: 1px solid;
 }
 .gemini {
@@ -216,7 +234,7 @@
   font-family: var(--font-mono);
   font-size: 9px;
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--accent-muted);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
@@ -251,28 +269,18 @@
   }
 }
 
-/* ── Transformation — enhanced animation ── */
+/* ── Transformation ── */
 .transformation {
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: var(--sp-2) var(--sp-3);
   background: var(--surface-sunken);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   border-left: 3px solid var(--accent);
   animation: slideInLeft var(--duration-base) var(--ease-out) both;
 }
 
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 .transformRow { display: flex; flex-direction: column; gap: 2px; }
 .transformLabel {
   font-family: var(--font-mono);
@@ -305,18 +313,6 @@
   font-family: var(--font-mono); 
   font-size: 16px; 
   color: var(--accent);
-  animation: pulse-arrow 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse-arrow {
-  0%, 100% { 
-    opacity: 0.5;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
 }
 
 .arrowLabel {
@@ -326,7 +322,7 @@
   text-transform: capitalize;
   background: var(--surface-hover);
   padding: 1px 6px;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 /* ── Explanation — prominently highlighted ── */
@@ -339,11 +335,10 @@
   padding: var(--sp-3);
   border: 2px solid var(--accent);
   border-left: 4px solid var(--accent);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
   margin: 0;
   animation: fadeIn var(--duration-base) var(--ease-out) both;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* ── KaTeX ── */
@@ -354,7 +349,7 @@
   font-size: var(--text-mono);
   background: var(--surface-sunken);
   padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 
 /* ── Substeps ── */
@@ -365,7 +360,7 @@
   padding: var(--sp-2) var(--sp-3);
   background: color-mix(in srgb, var(--accent) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
 }
 .substep { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
 .substepLabel {
@@ -391,7 +386,7 @@
   50% { opacity: 0.35; }
 }
 
-/* ── Loading placeholder (absolute overlay) ── */
+/* ── Loading placeholder ── */
 .loadingPlaceholder {
   position: absolute;
   inset: 0;
@@ -414,7 +409,7 @@
 }
 
 .skeletonBox {
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: linear-gradient(
     90deg,
     var(--surface-sunken) 25%,
@@ -440,14 +435,14 @@
   gap: 8px;
   padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   background: var(--surface-raised);
   animation: fadeUp var(--duration-slow) var(--ease-out) both;
 }
 
 .skeletonLine {
   height: 10px;
-  border-radius: 5px;
+  border-radius: 0;
   background: linear-gradient(
     90deg,
     var(--surface-sunken) 25%,

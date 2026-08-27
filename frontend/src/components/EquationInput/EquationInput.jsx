@@ -307,6 +307,10 @@ export default function EquationInput({ value, onChange, onSolve, loading,
 
       {/* ── Solve button ── */}
       <div className={styles.actionRow}>
+        {/* U4: Document Ctrl+Enter shortcut */}
+        <p className={styles.shortcutHint}>
+          Tip: press <kbd style={{ fontFamily: 'var(--font-mono)', padding: '1px 5px', border: '1px solid var(--border-color)', borderRadius: 0, fontSize: 10 }}>Ctrl+Enter</kbd> to solve
+        </p>
         <button
           id="solve-btn"
           className={styles.solveBtn}
@@ -321,7 +325,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
               Solving…
             </>
           ) : (
-            <>Solve <span className={styles.solveBtnArrow}></span></>
+            <>Solve <span className={styles.solveBtnArrow}>→</span></>
           )}
         </button>
       </div>

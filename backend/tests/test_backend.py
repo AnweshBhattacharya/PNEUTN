@@ -69,6 +69,15 @@ class TestSafeParse:
         expr = safe_parse("2x")
         assert expr == sympy.sympify("2*x")
 
+    def test_reject_non_finite_expression(self):
+        from safe_parse import safe_parse, ExpressionError
+        with pytest.raises(ExpressionError, match="finite"):
+            safe_parse("1/0")
+
+    def test_accept_hyperbolic_inverse_function(self):
+        from safe_parse import safe_parse
+        assert safe_parse("asinh(x)") is not None
+
 
 # ── /solve ────────────────────────────────────────────────────────────────
 
@@ -156,6 +165,24 @@ class TestSolveDerivative:
         assert status == 200, body
         assert "y" in body["result_latex"] or "2" in body["result_latex"]
 
+    def test_reject_non_integer_derivative_order(self):
+        status, body = self._solve({
+            "expr": "x^2", "operation": "derivative", "wrt": "x", "order": "not-an-order"
+        })
+        assert status == 400, body
+
+    def test_unexpected_calculation_error_is_not_exposed(self, monkeypatch):
+        import solve
+
+        def fail(*_args, **_kwargs):
+            raise RuntimeError("internal detail should not reach the browser")
+
+        monkeypatch.setattr(solve, "_derivative_steps", fail)
+        status, body = self._solve({"expr": "x^2", "operation": "derivative", "wrt": "x"})
+        assert status == 500, body
+        assert body["message"] == "The service could not process this request."
+        assert "internal detail" not in json.dumps(body)
+
 
 class TestGeminiNarration:
     def test_uses_current_sdk_and_stable_model(self, monkeypatch):
@@ -171,7 +198,7 @@ class TestGeminiNarration:
                 return types.SimpleNamespace(text='["Apply the power rule."]')
 
         class FakeClient:
-            def __init__(self, api_key):
+            def __init__(self, api_key, **_kwargs):
                 assert api_key == "test-key"
                 self.models = FakeModels()
 
@@ -179,7 +206,8 @@ class TestGeminiNarration:
         fake_google.genai = types.SimpleNamespace(Client=FakeClient)
         fake_google_genai = types.ModuleType("google.genai")
         fake_google_genai.types = types.SimpleNamespace(
-            GenerateContentConfig=lambda **kwargs: kwargs
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            HttpOptions=lambda **kwargs: kwargs,
         )
         monkeypatch.setitem(sys.modules, "google", fake_google)
         monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
@@ -208,14 +236,15 @@ class TestGeminiNarration:
                 raise FakeClientError("Do not return provider messages to clients")
 
         class FakeClient:
-            def __init__(self, api_key):
+            def __init__(self, api_key, **_kwargs):
                 self.models = FakeModels()
 
         fake_google = types.ModuleType("google")
         fake_google.genai = types.SimpleNamespace(Client=FakeClient)
         fake_google_genai = types.ModuleType("google.genai")
         fake_google_genai.types = types.SimpleNamespace(
-            GenerateContentConfig=lambda **kwargs: kwargs
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            HttpOptions=lambda **kwargs: kwargs,
         )
         monkeypatch.setitem(sys.modules, "google", fake_google)
         monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
@@ -252,14 +281,15 @@ class TestGeminiNarration:
                 return types.SimpleNamespace(text='["Apply the power rule."]')
 
         class FakeClient:
-            def __init__(self, api_key):
+            def __init__(self, api_key, **_kwargs):
                 self.models = FakeModels()
 
         fake_google = types.ModuleType("google")
         fake_google.genai = types.SimpleNamespace(Client=FakeClient)
         fake_google_genai = types.ModuleType("google.genai")
         fake_google_genai.types = types.SimpleNamespace(
-            GenerateContentConfig=lambda **kwargs: kwargs
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            HttpOptions=lambda **kwargs: kwargs,
         )
         monkeypatch.setitem(sys.modules, "google", fake_google)
         monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
@@ -302,14 +332,15 @@ class TestGeminiNarration:
                 ]
 
         class FakeClient:
-            def __init__(self, api_key):
+            def __init__(self, api_key, **_kwargs):
                 self.models = FakeModels()
 
         fake_google = types.ModuleType("google")
         fake_google.genai = types.SimpleNamespace(Client=FakeClient)
         fake_google_genai = types.ModuleType("google.genai")
         fake_google_genai.types = types.SimpleNamespace(
-            GenerateContentConfig=lambda **kwargs: kwargs
+            GenerateContentConfig=lambda **kwargs: kwargs,
+            HttpOptions=lambda **kwargs: kwargs,
         )
         monkeypatch.setitem(sys.modules, "google", fake_google)
         monkeypatch.setitem(sys.modules, "google.genai", fake_google_genai)
@@ -413,6 +444,18 @@ class TestRiemann:
         })
         assert status in (400, 422), body
 
+    def test_scalar_bounds_rejected_without_server_error(self):
+        status, body = self._riemann({
+            "expr": "x^2", "bounds": 5, "sub_intervals": 10
+        })
+        assert status == 400, body
+
+    def test_non_finite_bounds_rejected(self):
+        import riemann
+        response = riemann.handle({"expr": "x^2", "bounds": [0, float("inf")], "sub_intervals": 10})
+        status, body = parse_response(response)
+        assert status == 400, body
+
     def test_rectangles_shape(self):
         status, body = self._riemann({
             "expr": "x^2", "bounds": [0, 2], "sub_intervals": 5
@@ -444,6 +487,40 @@ class TestCORS:
         event = make_event("/solve", {"expr": "x^2", "operation": "derivative", "wrt": "x"})
         resp = self.handler(event, None)
         assert "Access-Control-Allow-Origin" in resp.get("headers", {})
+        assert resp["headers"]["Access-Control-Allow-Origin"] != "*"
+
+
+# ── HTTP request hardening ───────────────────────────────────────────────
+
+class TestRequestHardening:
+    def setup_method(self):
+        import app as app_module
+        self.handler = app_module.handler
+
+    def test_rejects_json_arrays(self):
+        event = make_event("/solve", [])
+        status, body = parse_response(self.handler(event, None))
+        assert status == 400, body
+        assert body["error"] == "malformed_request"
+
+    def test_rejects_invalid_base64(self):
+        event = make_event("/solve", {})
+        event["body"] = "not valid base64!"
+        event["isBase64Encoded"] = True
+        status, body = parse_response(self.handler(event, None))
+        assert status == 400, body
+
+    def test_rejects_non_finite_json_number(self):
+        event = make_event("/solve", {})
+        event["body"] = '{"expr":"x","operation":"integral","bounds":[NaN,1]}'
+        status, body = parse_response(self.handler(event, None))
+        assert status == 400, body
+
+    def test_rejects_unsupported_method(self):
+        event = make_event("/solve", {})
+        event["requestContext"]["http"]["method"] = "GET"
+        status, body = parse_response(self.handler(event, None))
+        assert status == 405, body
 
 
 # ── Route not found ───────────────────────────────────────────────────────

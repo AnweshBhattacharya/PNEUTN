@@ -15,8 +15,8 @@ eval, exec, import, or any Python builtins that could be exploited.
 import re
 import sympy
 from sympy import (
-    Symbol, Integer, Float, Rational, pi, E, I, oo, zoo, nan,
-    sin, cos, tan, asin, acos, atan, atan2,
+    Symbol, Integer, Float, Rational, pi, E, I,
+    sin, cos, tan, asin, acos, atan,
     sinh, cosh, tanh, asinh, acosh, atanh,
     exp, log, sqrt, Abs, sign,
     Add, Mul, Pow,
@@ -36,7 +36,7 @@ ALLOWED_FUNCTIONS = {
     "sin", "cos", "tan",
     "exp", "log", "sqrt",
     "asin", "acos", "atan",
-    "sinh", "cosh", "tanh",
+    "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
     "Abs", "sign",
 }
 
@@ -65,13 +65,11 @@ _SAFE_GLOBAL_DICT = {
     "pi": pi,
     "E": E,
     "I": I,
-    "oo": oo,
-    "zoo": zoo,
-    "nan": nan,
     # Allowed functions
     "sin": sin,   "cos": cos,   "tan": tan,
     "asin": asin, "acos": acos, "atan": atan,
     "sinh": sinh, "cosh": cosh, "tanh": tanh,
+    "asinh": asinh, "acosh": acosh, "atanh": atanh,
     "exp": exp,   "log": log,   "sqrt": sqrt,
     "Abs": Abs,   "sign": sign,
 }
@@ -80,6 +78,22 @@ _SAFE_GLOBAL_DICT = {
 class ExpressionError(ValueError):
     """Raised when a user-supplied expression fails any safety check."""
     pass
+
+
+MAX_EXPRESSION_LENGTH = 200
+MAX_EXPRESSION_NODES = 100
+
+
+def _validate_expression_complexity(parsed: sympy.Expr) -> None:
+    """Reject expressions that are valid but unreasonably complex to process."""
+    node_count = sum(1 for _ in sympy.preorder_traversal(parsed))
+    if node_count > MAX_EXPRESSION_NODES:
+        raise ExpressionError("Expression is too complex. Use at most 100 mathematical terms.")
+
+    # SymPy represents 1 / 0, log(0), and similar non-finite input as these
+    # values. Rejecting them avoids invalid JSON values and undefined graphing.
+    if parsed.has(sympy.oo, sympy.zoo, sympy.nan):
+        raise ExpressionError("Expression must evaluate to a finite mathematical value.")
 
 
 def safe_parse(expr_string: str) -> sympy.Expr:
@@ -98,8 +112,8 @@ def safe_parse(expr_string: str) -> sympy.Expr:
         raise ExpressionError("Expression must be a string.")
 
     # ── Layer 1: length cap ──────────────────────────────────────────────
-    if len(expr_string) > 200:
-        raise ExpressionError("Expression too long (max 200 characters).")
+    if len(expr_string) > MAX_EXPRESSION_LENGTH:
+        raise ExpressionError(f"Expression too long (max {MAX_EXPRESSION_LENGTH} characters).")
 
     # ── Layer 2: character whitelist ─────────────────────────────────────
     if not _SAFE_CHAR_RE.match(expr_string):
@@ -118,7 +132,11 @@ def safe_parse(expr_string: str) -> sympy.Expr:
             evaluate=True,
         )
     except Exception as exc:
-        raise ExpressionError(f"Could not parse expression: {exc}") from exc
+        # Parser internals can vary by SymPy release. Keep the public error
+        # stable instead of exposing implementation details to the client.
+        raise ExpressionError("Could not parse expression. Check its syntax.") from exc
+
+    _validate_expression_complexity(parsed)
 
     # ── Layer 4: post-parse symbol + function validation ──────────────────
     for sym in parsed.free_symbols:

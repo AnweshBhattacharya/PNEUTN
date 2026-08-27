@@ -154,10 +154,58 @@ function localIntegralOrder({ curve_upper, curve_lower, order = 'dy_dx' }) {
   const compUpper = compileExpr(curve_upper)
   const compLower = compileExpr(curve_lower)
 
-  // Standard numerical sampling over [0, 1] or default bounds
-  const x_lo = 0
-  const x_hi = 1
-  const n_pts = 30
+  // Find numerical intersections by scanning [-6, 6]
+  const searchMin = -6
+  const searchMax = 6
+  const scanSteps = 240
+  const scanDx = (searchMax - searchMin) / scanSteps
+  const roots = []
+  let prevDiff = null
+  let prevX = null
+
+  if (compUpper && compLower) {
+    for (let i = 0; i <= scanSteps; i++) {
+      const x = searchMin + i * scanDx
+      const yu = evalAt(compUpper, { x })
+      const yl = evalAt(compLower, { x })
+      if (yu == null || yl == null) continue
+      const diff = yu - yl
+      if (Math.abs(diff) < 1e-4) {
+        roots.push([parseFloat(x.toFixed(4)), parseFloat(yu.toFixed(4))])
+      } else if (prevDiff !== null && Math.sign(diff) !== Math.sign(prevDiff)) {
+        const rootX = prevX + (-prevDiff / (diff - prevDiff)) * (x - prevX)
+        const rootY = evalAt(compUpper, { x: rootX }) ?? 0
+        roots.push([parseFloat(rootX.toFixed(4)), parseFloat(rootY.toFixed(4))])
+      }
+      prevDiff = diff
+      prevX = x
+    }
+  }
+
+  // Deduplicate close roots
+  const intersections = []
+  roots.forEach(([rx, ry]) => {
+    if (!intersections.some(([ix]) => Math.abs(ix - rx) < 0.05)) {
+      intersections.push([rx, ry])
+    }
+  })
+
+  let x_lo = 0
+  let x_hi = 1
+  if (intersections.length >= 2) {
+    x_lo = Math.min(intersections[0][0], intersections[1][0])
+    x_hi = Math.max(intersections[0][0], intersections[1][0])
+  } else if (intersections.length === 1) {
+    x_lo = intersections[0][0]
+    x_hi = x_lo + 1
+  }
+
+  if (Math.abs(x_hi - x_lo) < 1e-3) {
+    x_lo = 0
+    x_hi = 1
+  }
+
+  const n_pts = 40
   const upper_pts = []
   const lower_pts = []
   const step = (x_hi - x_lo) / (n_pts - 1)
@@ -171,14 +219,17 @@ function localIntegralOrder({ curve_upper, curve_lower, order = 'dy_dx' }) {
   }
 
   const region_vertices = upper_pts.concat(lower_pts.slice().reverse())
-  const intersections = [[0, 0], [1, 1]]
+  const finalIntersections = intersections.length > 0 ? intersections : [[x_lo, x_lo], [x_hi, x_hi]]
+
+  const fmtLo = Number.isInteger(x_lo) ? String(x_lo) : x_lo.toFixed(2)
+  const fmtHi = Number.isInteger(x_hi) ? String(x_hi) : x_hi.toFixed(2)
 
   const bounds_latex = order === 'dy_dx'
-    ? `\\int_{0}^{1} \\int_{${curve_lower}}^{${curve_upper}} \\, dy \\, dx`
-    : `\\int_{0}^{1} \\int_{${curve_upper}}^{\\sqrt{y}} \\, dx \\, dy`
+    ? `\\int_{${fmtLo}}^{${fmtHi}} \\int_{${curve_lower}}^{${curve_upper}} \\, dy \\, dx`
+    : `\\int_{${fmtLo}}^{${fmtHi}} \\int_{${curve_upper}}^{${curve_lower}} \\, dx \\, dy`
 
   return {
-    intersections,
+    intersections: finalIntersections,
     bounds_latex,
     region_vertices,
     sweep_axis: order === 'dy_dx' ? 'y' : 'x',
