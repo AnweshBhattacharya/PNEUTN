@@ -45,7 +45,7 @@ _MODEL_PREFERENCE = (
     "gemini-3.5-flash",
     "gemini-3.1-flash-lite",
 )
-GEMINI_REQUEST_TIMEOUT_MS = 7_000
+GEMINI_REQUEST_TIMEOUT_MS = 10_000
 GEMINI_MAX_OUTPUT_TOKENS = 512
 
 # ── Narration templates ─────────────────────────────────────────────────────
