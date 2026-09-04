@@ -1,0 +1,39 @@
+/* ParameterDisplay.module.css — RawBlock compliant */
+
+.overlay {
+  position: absolute;
+  top: var(--sp-2, 8px);
+  right: var(--sp-2, 8px);
+  background: var(--surface-raised);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny, 10px);
+  pointer-events: none;
+  z-index: 10;
+  min-width: 120px;
+  opacity: 0.92;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.key {
+  color: var(--content-tertiary);
+  letter-spacing: 0.05em;
+}
+
+.val {
+  color: var(--content-primary);
+  font-weight: 600;
+}

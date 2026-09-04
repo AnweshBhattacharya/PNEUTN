@@ -51,11 +51,10 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [balanceError, setBalanceError] = useState(null)
   const [operation, setOperation]       = useState('derivative')
-  const [wrt, setWrt]                   = useState('x')
-  const [order, setOrder]               = useState(1)
-  const [boundsEnabled, setBoundsEnabled] = useState(false)
-  const [boundLo, setBoundLo] = useState('0')
-  const [boundHi, setBoundHi] = useState('1')
+  const [wrtSequence, setWrtSequence]   = useState(['x'])
+  const [integrationSequence, setIntegrationSequence] = useState([
+    { wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }
+  ])
   const boundsToggleId = 'bounds-toggle'
 
   const wrtOptions = useMemo(() => {
@@ -72,10 +71,10 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   }, [value, latexValue])
 
   useEffect(() => {
-    if (!wrtOptions.includes(wrt) && wrtOptions.length > 0) {
-      setWrt(wrtOptions[0])
+    if (wrtSequence.length === 0 && wrtOptions.length > 0) {
+      setWrtSequence([wrtOptions[0]])
     }
-  }, [wrtOptions, wrt])
+  }, [wrtOptions, wrtSequence])
 
   // Sync MathLive if parent changes value programmatically
   useEffect(() => {
@@ -88,13 +87,26 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   // Apply example settings when parent loads an example chip (F5)
   useEffect(() => {
     if (exampleOperation) setOperation(exampleOperation)
-    if (exampleWrt) setWrt(exampleWrt)
+    if (exampleWrt) {
+      setWrtSequence([exampleWrt])
+      setIntegrationSequence(prev => {
+        const copy = [...prev]
+        copy[0] = { ...copy[0], wrt: exampleWrt }
+        return copy
+      })
+    }
     if (exampleBounds) {
-      setBoundsEnabled(true)
-      setBoundLo(String(exampleBounds[0]))
-      setBoundHi(String(exampleBounds[1]))
+      setIntegrationSequence(prev => {
+        const copy = [...prev]
+        copy[0] = { ...copy[0], boundsEnabled: true, boundLo: String(exampleBounds[0]), boundHi: String(exampleBounds[1]) }
+        return copy
+      })
     } else if (exampleOperation === 'derivative') {
-      setBoundsEnabled(false)
+      setIntegrationSequence(prev => {
+        const copy = [...prev]
+        copy[0] = { ...copy[0], boundsEnabled: false }
+        return copy
+      })
     }
   }, [exampleOperation, exampleWrt, exampleBounds])
 
@@ -138,21 +150,28 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     setBalanceError(null)
 
     // Validate bounds before sending — prevents NaN→null serialization (AC1)
-    if (boundsEnabled) {
-      const lo = parseFloat(boundLo)
-      const hi = parseFloat(boundHi)
-      if (!isFinite(lo) || !isFinite(hi)) {
-        setBalanceError('Bounds must be numeric values (e.g. 0 and 3).')
-        return
+    if (operation === 'integral') {
+      for (const step of integrationSequence) {
+        if (step.boundsEnabled) {
+          const lo = parseFloat(step.boundLo)
+          const hi = parseFloat(step.boundHi)
+          if (!isFinite(lo) || !isFinite(hi)) {
+            setBalanceError('Bounds must be numeric values (e.g. 0 and 3).')
+            return
+          }
+        }
       }
     }
 
     onSolve?.({
       expr,
       operation,
-      wrt,
-      order: parseInt(order, 10),
-      bounds: boundsEnabled ? [parseFloat(boundLo), parseFloat(boundHi)] : null,
+      wrtSequence: operation === 'derivative' ? wrtSequence : undefined,
+      integrationSequence: operation === 'integral' ? integrationSequence.map(i => ({ wrt: i.wrt, bounds: i.boundsEnabled ? [parseFloat(i.boundLo), parseFloat(i.boundHi)] : null })) : undefined,
+      // fallback for old apiClient.js
+      wrt: operation === 'derivative' ? wrtSequence[wrtSequence.length - 1] : integrationSequence[integrationSequence.length - 1].wrt,
+      order: operation === 'derivative' ? wrtSequence.length : 1,
+      bounds: operation === 'integral' && integrationSequence[integrationSequence.length - 1].boundsEnabled ? [parseFloat(integrationSequence[integrationSequence.length - 1].boundLo), parseFloat(integrationSequence[integrationSequence.length - 1].boundHi)] : null,
     })
   }
 
@@ -224,11 +243,8 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       <EquationPreview
         latexExpr={latexValue}
         operation={operation}
-        wrt={wrt}
-        order={order}
-        boundsEnabled={boundsEnabled}
-        boundLo={boundLo}
-        boundHi={boundHi}
+        wrtSequence={wrtSequence}
+        integrationSequence={integrationSequence}
       />
 
       {/* ── Controls ── */}
@@ -256,15 +272,24 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           </div>
 
           <div className={styles.controlGroup}>
-            <span className={styles.controlLabel}>Wrt</span>
+            <span className={styles.controlLabel}>{operation === 'derivative' ? 'Wrt Add' : 'Wrt'}</span>
             <div className={styles.pillGroup} role="group" aria-label="Variable">
               {wrtOptions.map(v => (
                 <button
                   key={v}
-                  className={`${styles.pill} ${wrt === v ? styles.pillActive : ''}`}
-                  onClick={() => setWrt(v)}
+                  className={`${styles.pill}`}
+                  onClick={() => {
+                    if (operation === 'derivative') {
+                      setWrtSequence(prev => prev.length < 5 ? [...prev, v] : prev)
+                    } else {
+                      setIntegrationSequence(prev => {
+                        const copy = [...prev]
+                        copy[copy.length - 1].wrt = v
+                        return copy
+                      })
+                    }
+                  }}
                   type="button"
-                  aria-pressed={wrt === v}
                 >
                   {v}
                 </button>
@@ -273,71 +298,100 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           </div>
         </div>
 
-        {/* Derivative order */}
+        {/* Derivative Sequence Builder */}
         {operation === 'derivative' && (
           <div className={styles.controlGroup}>
-            <span className={styles.controlLabel}>Order</span>
-            <div className={styles.stepperRow}>
-              <button
-                className={styles.stepperBtn}
-                type="button"
-                disabled={order <= 1}
-                onClick={() => setOrder(o => Math.max(1, o - 1))}
-                aria-label="Decrease order"
-              >−</button>
-              <span className={styles.stepperValue} aria-live="polite">{order}</span>
-              <button
-                className={styles.stepperBtn}
-                type="button"
-                disabled={order >= 5}
-                onClick={() => setOrder(o => Math.min(5, o + 1))}
-                aria-label="Increase order"
-              >+</button>
+            <span className={styles.controlLabel}>Sequence</span>
+            <div className={styles.stepperRow} style={{ flexWrap: 'wrap', gap: '4px' }}>
+              {wrtSequence.map((w, i) => (
+                <span key={i} className={styles.pillActive} style={{ padding: '2px 6px', fontSize: '12px', border: '1px solid var(--border-color)', borderRadius: '0' }}>
+                  ∂{w}
+                </span>
+              ))}
+              {wrtSequence.length > 0 && (
+                <button
+                  className={styles.pill}
+                  style={{ padding: '2px 6px', fontSize: '12px' }}
+                  onClick={() => setWrtSequence(prev => prev.slice(0, -1))}
+                >
+                  undo
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* Integral bounds */}
+        {/* Integral sequences */}
         {operation === 'integral' && (
-          <div className={styles.controlGroup}>
-            <div className={styles.boundsToggleRow}>
-              <label className={styles.toggle}>
-                <input
-                  type="checkbox"
-                  id={boundsToggleId}
-                  checked={boundsEnabled}
-                  onChange={e => setBoundsEnabled(e.target.checked)}
-                />
-                <span className={styles.toggleTrack} />
-                <span className={styles.toggleThumb} />
-              </label>
-              <label htmlFor={boundsToggleId} className={styles.toggleLabel}>
-                Definite bounds
-              </label>
-            </div>
-            {boundsEnabled && (
-              <div className={styles.boundsRow}>
-                <input
-                  type="text"
-                  value={boundLo}
-                  onChange={e => setBoundLo(e.target.value)}
-                  className={styles.boundInput}
-                  placeholder="lower"
-                  id="bound-lower"
-                  aria-label="Lower bound"
-                />
-                <span className={styles.boundSep}>to</span>
-                <input
-                  type="text"
-                  value={boundHi}
-                  onChange={e => setBoundHi(e.target.value)}
-                  className={styles.boundInput}
-                  placeholder="upper"
-                  id="bound-upper"
-                  aria-label="Upper bound"
-                />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className={styles.controlGroup}>
+              <span className={styles.controlLabel}>Integrals</span>
+              <div className={styles.stepperRow}>
+                <button className={styles.stepperBtn} type="button" disabled={integrationSequence.length <= 1} onClick={() => setIntegrationSequence(p => p.slice(1))}>−</button>
+                <span className={styles.stepperValue}>{integrationSequence.length}</span>
+                <button className={styles.stepperBtn} type="button" disabled={integrationSequence.length >= 3} onClick={() => setIntegrationSequence(p => [{ wrt: wrtOptions[0], boundsEnabled: false, boundLo: '0', boundHi: '1' }, ...p])}>+</button>
               </div>
-            )}
+            </div>
+
+            {integrationSequence.map((step, idx) => (
+              <div key={idx} className={styles.controlGroup} style={{ borderLeft: '2px solid var(--border-color)', paddingLeft: '8px', marginLeft: '4px' }}>
+                <span className={styles.controlLabel}>d{step.wrt} bounds</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                  <div className={styles.boundsToggleRow}>
+                    <label className={styles.toggle}>
+                      <input
+                        type="checkbox"
+                        checked={step.boundsEnabled}
+                        onChange={e => {
+                          const val = e.target.checked
+                          setIntegrationSequence(prev => {
+                            const copy = [...prev]
+                            copy[idx] = { ...copy[idx], boundsEnabled: val }
+                            return copy
+                          })
+                        }}
+                      />
+                      <span className={styles.toggleTrack} />
+                      <span className={styles.toggleThumb} />
+                    </label>
+                    <label className={styles.toggleLabel}>Definite</label>
+                  </div>
+                  {step.boundsEnabled && (
+                    <div className={styles.boundsRow}>
+                      <input
+                        type="text"
+                        value={step.boundLo}
+                        onChange={e => {
+                          const val = e.target.value
+                          setIntegrationSequence(prev => {
+                            const copy = [...prev]
+                            copy[idx] = { ...copy[idx], boundLo: val }
+                            return copy
+                          })
+                        }}
+                        className={styles.boundInput}
+                        placeholder="lower"
+                      />
+                      <span className={styles.boundSep}>to</span>
+                      <input
+                        type="text"
+                        value={step.boundHi}
+                        onChange={e => {
+                          const val = e.target.value
+                          setIntegrationSequence(prev => {
+                            const copy = [...prev]
+                            copy[idx] = { ...copy[idx], boundHi: val }
+                            return copy
+                          })
+                        }}
+                        className={styles.boundInput}
+                        placeholder="upper"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

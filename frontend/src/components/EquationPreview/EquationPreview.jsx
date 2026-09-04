@@ -8,36 +8,65 @@ import React, { useMemo } from 'react'
 import katex from 'katex'
 import styles from './EquationPreview.module.css'
 
-function buildDisplayLatex(latexExpr, operation, wrt, order, boundsEnabled, boundLo, boundHi) {
+function buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence) {
   if (!latexExpr) return null
-
   const inner = latexExpr
 
   if (operation === 'derivative') {
-    if (order === 1) {
-      return `\\frac{d}{d${wrt}}\\left[${inner}\\right]`
+    if (!wrtSequence || wrtSequence.length === 0) return `\\frac{d}{dx}\\left[${inner}\\right]`
+    
+    if (wrtSequence.length === 1) {
+      return `\\frac{d}{d${wrtSequence[0]}}\\left[${inner}\\right]`
     }
-    return `\\frac{d^{${order}}}{d${wrt}^{${order}}}\\left[${inner}\\right]`
+    
+    const groups = []
+    let current = wrtSequence[0]
+    let count = 1
+    for (let i = 1; i < wrtSequence.length; i++) {
+      if (wrtSequence[i] === current) { count++ }
+      else {
+        groups.push({ v: current, c: count })
+        current = wrtSequence[i]
+        count = 1
+      }
+    }
+    groups.push({ v: current, c: count })
+    
+    // For mixed partials, standard notation uses \partial
+    const denom = groups.map(g => g.c === 1 ? `\\partial ${g.v}` : `\\partial ${g.v}^{${g.c}}`).join(' ')
+    return `\\frac{\\partial^{${wrtSequence.length}}}{${denom}}\\left[${inner}\\right]`
   }
 
   // integral
-  if (boundsEnabled && boundLo !== '' && boundHi !== '') {
-    return `\\int_{${boundLo}}^{${boundHi}} \\left(${inner}\\right) \\, d${wrt}`
+  if (!integrationSequence || integrationSequence.length === 0) return `\\int \\left(${inner}\\right) \\, dx`
+
+  let result = `\\left(${inner}\\right)`
+  let pre = ""
+  let post = ""
+  
+  // Outer integrals first in pre, inner first in post
+  for (let i = integrationSequence.length - 1; i >= 0; i--) {
+    const step = integrationSequence[i]
+    if (step.boundsEnabled && step.boundLo !== '' && step.boundHi !== '') {
+      pre += `\\int_{${step.boundLo}}^{${step.boundHi}} `
+    } else {
+      pre += `\\int `
+    }
   }
-  return `\\int \\left(${inner}\\right) \\, d${wrt}`
+  for (let i = 0; i < integrationSequence.length; i++) {
+    post += ` \\, d${integrationSequence[i].wrt}`
+  }
+  return `${pre} ${result} ${post}`
 }
 
 export default function EquationPreview({
-  latexExpr,      // raw latex string from MathLive
+  latexExpr,
   operation,
-  wrt,
-  order,
-  boundsEnabled,
-  boundLo,
-  boundHi,
+  wrtSequence = ['x'],
+  integrationSequence = [{ wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }],
 }) {
   const { html, error } = useMemo(() => {
-    const displayLatex = buildDisplayLatex(latexExpr, operation, wrt, order, boundsEnabled, boundLo, boundHi)
+    const displayLatex = buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence)
     if (!displayLatex) return { html: null, error: null }
 
     try {
@@ -52,7 +81,6 @@ export default function EquationPreview({
         error: null,
       }
     } catch {
-      // KaTeX parse error — try without the wrapper
       try {
         return {
           html: katex.renderToString(latexExpr, {
@@ -68,13 +96,18 @@ export default function EquationPreview({
         return { html: null, error: 'Cannot render expression' }
       }
     }
-  }, [latexExpr, operation, wrt, order, boundsEnabled, boundLo, boundHi])
+  }, [latexExpr, operation, wrtSequence, integrationSequence])
 
-  const SUPERSCRIPTS = { 1: '', 2: '²', 3: '³', 4: '⁴', 5: '⁵' }
-  const sup = SUPERSCRIPTS[order] ?? (order > 1 ? `^${order}` : '')
-  const opLabel = operation === 'derivative'
-    ? `d${sup}/d${wrt}${sup}`
-    : `∫ d${wrt}`
+  let opLabel = ''
+  if (operation === 'derivative') {
+    if (!wrtSequence || wrtSequence.length <= 1) {
+      opLabel = `d/d${wrtSequence?.[0] || 'x'}`
+    } else {
+      opLabel = `∂^${wrtSequence.length}/∂…`
+    }
+  } else {
+    opLabel = integrationSequence?.length > 1 ? `${'∫'.repeat(integrationSequence.length)}` : `∫ d${integrationSequence?.[0]?.wrt || 'x'}`
+  }
 
   return (
     <div className={`${styles.wrapper} ${html ? styles.hasContent : ''}`}>
@@ -83,7 +116,7 @@ export default function EquationPreview({
 
       {html ? (
         <div
-          key={html} // key change triggers the CSS animation
+          key={html}
           className={styles.display}
           dangerouslySetInnerHTML={{ __html: html }}
         />

@@ -99,6 +99,12 @@ export default function GraphCanvas3D({
   markedX = null,
   markedY = null,
   onVolumeCalculated = null,
+  // 3D Riemann bars
+  riemannRects = [],
+  showRiemannBars = false,
+  riemannError = null,
+  onToggleRiemannBars = null,
+  onRequestRiemann = null,
 }) {
   const mountRef     = useRef(null)
   const sceneRef     = useRef(null)
@@ -108,6 +114,7 @@ export default function GraphCanvas3D({
   const wireMeshRef  = useRef(null)
   const skirtMeshRef = useRef(null)
   const floorMeshRef = useRef(null)
+  const riemannBarPoolRef = useRef([])  // pre-allocated BoxGeometry pool (200 entries)
   const posAttrRef   = useRef(null)
   const colAttrRef   = useRef(null)
   const skirtPosRef  = useRef(null)
@@ -471,6 +478,22 @@ export default function GraphCanvas3D({
     }
     animate()
 
+    // ── Pre-allocate Riemann bar pool (200 unit cubes, all hidden) ──────────
+    const RIEMANN_POOL_SIZE = 200
+    const barGeo = new THREE.BoxGeometry(1, 1, 1)
+    const barMat = new THREE.MeshPhongMaterial({
+      color: isDark() ? 0x60a5fa : 0x2563eb,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    })
+    for (let i = 0; i < RIEMANN_POOL_SIZE; i++) {
+      const mesh = new THREE.Mesh(barGeo, barMat.clone())
+      mesh.visible = false
+      scene.add(mesh)
+      riemannBarPoolRef.current.push(mesh)
+    }
+
     const ro = new ResizeObserver(() => {
       const nW = Math.max(mount.clientWidth || 1, 1)
       const nH = Math.max(mount.clientHeight || 1, 1)
@@ -722,6 +745,30 @@ export default function GraphCanvas3D({
     dot.visible = true
   }, [markedX, markedY, exprStr, extraVars])
 
+  // ── 3D Riemann bars pool update ─────────────────────────────────────────
+  useEffect(() => {
+    const pool = riemannBarPoolRef.current
+    const rects = showRiemannBars ? (riemannRects ?? []) : []
+    const BAR_DEPTH = 0.5
+
+    rects.forEach(({ x0, x1, height }, i) => {
+      if (i >= pool.length) return
+      const mesh = pool[i]
+      const w = x1 - x0
+      const h = Math.abs(height)
+      const cx = (x0 + x1) / 2
+      const cy = height / 2
+      mesh.scale.set(w || 0.01, h || 0.01, BAR_DEPTH)
+      mesh.position.set(cx, cy, 0)
+      mesh.visible = true
+    })
+
+    // Hide unused pool entries — no dispose
+    for (let i = rects.length; i < pool.length; i++) {
+      pool[i].visible = false
+    }
+  }, [riemannRects, showRiemannBars])
+
   return (
     <div className={`${styles.wrapper} ${isExpanded ? styles.expanded : ''}`}>
       <div className={styles.toolbar}>
@@ -782,7 +829,30 @@ export default function GraphCanvas3D({
         <span className={styles.colorBarLabel}>high</span>
       </div>
 
-      <div className={styles.canvas} ref={mountRef}>
+      {/* ── Riemann Bars toggle (task 15.4) ── */}
+      <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
+          <input
+            type="checkbox"
+            checked={showRiemannBars}
+            onChange={e => {
+              onToggleRiemannBars?.(e.target.checked)
+              if (e.target.checked && (!riemannRects || riemannRects.length === 0)) {
+                onRequestRiemann?.()
+              }
+            }}
+            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+          />
+          Show Riemann Bars
+        </label>
+        {riemannError && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-error)', marginLeft: 8 }}>
+            {riemannError}
+          </span>
+        )}
+      </div>
+
+      <div className={styles.canvas} ref={mountRef} style={{ position: 'relative' }}>
         {hasError && (
           <div className={styles.errorOverlay} role="alert">
             Cannot compute surface for this expression

@@ -26,11 +26,14 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
+import SliderSidebar from './components/SliderSidebar/SliderSidebar'
+import ParameterDisplay from './components/ParameterDisplay/ParameterDisplay'
+import { detectFreeParams } from './lib/freeParams'
 import StepPanel from './components/StepPanel/StepPanel'
 import RiemannControls from './components/RiemannControls/RiemannControls'
 import RegionToggle from './components/RegionToggle/RegionToggle'
 import LoadingBar from './components/shared/LoadingBar'
-import { solve as callSolve } from './lib/apiClient'
+import { solve as callSolve, riemann as callRiemann } from './lib/apiClient'
 import styles from './App.module.css'
 
 const EQ_COLORS      = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
@@ -102,6 +105,18 @@ export default function App() {
   const [activeExamplePatch, setActiveExamplePatch] = useState(null)
   const [mobilePanel, setMobilePanel] = useState('input')
 
+  // Free parameter slider values keyed by param name
+  const [paramValues, setParamValues] = useState({})
+
+  // Viewport range sliders (SliderSidebar → GraphCanvas2D)
+  const [xRange, setXRange] = useState([-10, 10])
+  const [yRange, setYRange] = useState([-10, 10])
+
+  // 3D Riemann bars
+  const [showRiemannBars3D, setShowRiemannBars3D] = useState(false)
+  const [riemannBars3DRects, setRiemannBars3DRects] = useState([])
+  const [riemannBars3DError, setRiemannBars3DError] = useState(null)
+
   // B1: dynamic Riemann bounds (replaces hardcoded [0,4])
   const [riemannBoundsLo, setRiemannBoundsLo] = useState('0')
   const [riemannBoundsHi, setRiemannBoundsHi] = useState('4')
@@ -147,6 +162,19 @@ export default function App() {
   const activeCurveIndex = equations.findIndex(e => e.id === activeId)
 
   useEffect(() => { setActiveExamplePatch(null) }, [activeId])
+
+  // Sync free parameter sliders whenever the active expression changes
+  useEffect(() => {
+    const wrt = activeExamplePatch?.wrt ?? 'x'
+    const detected = detectFreeParams(activeEq.expr ?? '', wrt)
+    setParamValues(prev => {
+      const next = {}
+      detected.forEach(name => {
+        next[name] = name in prev ? prev[name] : 1
+      })
+      return next
+    })
+  }, [activeEq?.expr, activeExamplePatch?.wrt])
 
   // B9: Clear Riemann state and area value when the active equation changes
   useEffect(() => {
@@ -208,8 +236,26 @@ export default function App() {
     }
   }, [activeId, updateEquation])
 
-  const loadExample = (example) => {
-    updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
+  // ── 3D Riemann bars request ───────────────────────────────────────
+  const handleRiemann3DRequest = useCallback(async () => {
+    setRiemannBars3DError(null)
+    try {
+      const lo = parseFloat(riemannBoundsLo)
+      const hi = parseFloat(riemannBoundsHi)
+      const bounds = [isFinite(lo) ? lo : 0, isFinite(hi) ? hi : 4]
+      const data = await callRiemann({
+        expr: activeEq.expr,
+        bounds,
+        sub_intervals: 10,
+        sample_point: 'midpoint',
+      })
+      setRiemannBars3DRects(data.rectangles ?? [])
+    } catch (e) {
+      setRiemannBars3DError(e.message || 'Riemann request failed')
+    }
+  }, [activeEq.expr, riemannBoundsLo, riemannBoundsHi])
+
+  const loadExample = (example) => {    updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
     setRiemannRects([])
     setRiemannSumResult(null)
     setActiveExamplePatch({
@@ -762,11 +808,30 @@ export default function App() {
               </aside>
             )}
 
+            {/* ── SliderSidebar: viewport + free-param sliders (2D only) ── */}
+            {graphMode === '2d' && (
+              <SliderSidebar
+                xRange={xRange}
+                yRange={yRange}
+                onXRangeChange={setXRange}
+                onYRangeChange={setYRange}
+                freeParams={Object.entries(paramValues).map(([name, value]) => ({ name, value }))}
+                onParamChange={(name, value) => setParamValues(prev => ({ ...prev, [name]: value }))}
+              />
+            )}
+
             {/* ── Main graph canvas ── */}
-            <div className={styles.graphMain}>
+            <div className={styles.graphMain} style={{ position: 'relative' }}>
+              {/* ParameterDisplay overlay — 2D only */}
               {graphMode === '2d' && (
-                <>
-                  <GraphCanvas2D
+                <ParameterDisplay
+                  xRange={xRange}
+                  yRange={yRange}
+                  paramValues={paramValues}
+                />
+              )}
+              <div style={{ display: graphMode === '2d' ? 'contents' : 'none' }}>
+                <GraphCanvas2D
                     equations={graphEquations}
                     activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
                     overlayRectangles={riemannRects}
@@ -781,6 +846,9 @@ export default function App() {
                     xRangeMax={xRangeMax}
                     areaValue={areaValue}
                     onAreaValue={setAreaValue}
+                    xRange={xRange}
+                    yRange={yRange}
+                    extraVars={paramValues}
                   />
 
                   {activeEq.numericSample?.length > 0 && (
@@ -801,9 +869,8 @@ export default function App() {
                       </div>
                     </section>
                   )}
-                </>
-              )}
-              {graphMode === '3d' && (
+              </div>
+              <div style={{ display: graphMode === '3d' ? 'contents' : 'none' }}>
                 <GraphCanvas3D
                   exprStr={activeEq.expr || 'sin(x) * cos(y)'}
                   xMin={xMin3D}
@@ -821,8 +888,16 @@ export default function App() {
                   showDerivative={showDerivative3D}
                   markedX={markedX3D}
                   markedY={markedY3D}
+                  riemannRects={riemannBars3DRects}
+                  showRiemannBars={showRiemannBars3D}
+                  riemannError={riemannBars3DError}
+                  onToggleRiemannBars={(val) => {
+                    setShowRiemannBars3D(val)
+                    if (!val) setRiemannBars3DRects([])
+                  }}
+                  onRequestRiemann={handleRiemann3DRequest}
                 />
-              )}
+              </div>
             </div>
 
           </div>

@@ -261,9 +261,9 @@ def _int_rule(expr: sympy.Expr, wrt: Symbol) -> str:
 
 # ── Derivative step extraction ──────────────────────────────────────────────
 
-def _derivative_steps(expr: sympy.Expr, wrt: Symbol, order: int) -> tuple[sympy.Expr, list[dict]]:
+def _derivative_steps(expr: sympy.Expr, wrt_sequence: list[Symbol]) -> tuple[sympy.Expr, list[dict]]:
     """
-    Produce granular steps for order-th derivative.
+    Produce granular steps for derivative with respect to a sequence of variables.
     For sum expressions, expand into per-term sub-steps.
     For products, show u·v′ + v·u′ explicitly.
     For chain rule, show outer and inner derivatives.
@@ -271,9 +271,8 @@ def _derivative_steps(expr: sympy.Expr, wrt: Symbol, order: int) -> tuple[sympy.
     steps: list[dict] = []
     current = expr
 
-    for o in range(order):
-        sup = f"^{{{o + 1}}}" if o > 0 else ""
-        before_wrap = f"\\frac{{d{sup}}}{{d{latex(wrt)}{sup}}}\\left[{latex(current)}\\right]"
+    for i, wrt in enumerate(wrt_sequence):
+        before_wrap = f"\\frac{{d}}{{d{latex(wrt)}}}\\left[{latex(current)}\\right]"
 
         rule = _diff_rule(current, wrt)
         result = diff(current, wrt)
@@ -416,93 +415,100 @@ def _split_product(expr: sympy.Expr, wrt: Symbol):
 
 # ── Integral step extraction ────────────────────────────────────────────────
 
-def _integral_steps(expr: sympy.Expr, wrt: Symbol, bounds) -> tuple[sympy.Expr, list[dict]]:
+def _integral_steps(expr: sympy.Expr, integration_sequence: list[dict]) -> tuple[sympy.Expr, list[dict]]:
     steps: list[dict] = []
-    rule = _int_rule(expr, wrt)
-    indef = f"\\int {latex(expr)} \\, d{latex(wrt)}"
+    current = expr
 
-    # Sum rule: split and show each term
-    if isinstance(expr, Add):
-        term_integrals = [integrate(t, wrt) for t in expr.args]
-        steps.append({
-            "rule": "sum_rule_integral",
-            "before_latex": indef,
-            "after_latex": " + ".join(
-                f"\\int {latex(t)} \\, d{latex(wrt)}" for t in expr.args
-            ),
-            "substeps": [
-                {"label": f"∫ {latex(t)} d{latex(wrt)}", "value": latex(ti) + " + C"}
-                for t, ti in zip(expr.args, term_integrals)
-            ],
-        })
-        antideriv = integrate(expr, wrt)
-        steps.append({
-            "rule": "simplify",
-            "before_latex": " + ".join(latex(ti) for ti in term_integrals) + " + C",
-            "after_latex": latex(antideriv) + " + C",
-        })
-    else:
-        antideriv = integrate(expr, wrt)
-        if bounds:
-            # Construct from validated Python numbers — never from strings (SECURITY_POLICY.md)
-            _lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
-            _hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
-            after = f"{latex(antideriv)} \\Big|_{{{latex(_lo)}}}^{{{latex(_hi)}}}"
-        else:
-            after = f"{latex(antideriv)} + C"
+    for item in integration_sequence:
+        wrt = item["wrt"]
+        bounds = item["bounds"]
+        rule = _int_rule(current, wrt)
+        indef = f"\\int {latex(current)} \\, d{latex(wrt)}"
 
-        # For power rule, show the formula explicitly
-        if rule == "power_rule_integral" and isinstance(expr, (Pow, Symbol)):
-            n = expr.args[1] if isinstance(expr, Pow) else sympy.Integer(1)
+        # Sum rule: split and show each term
+        if isinstance(current, Add):
+            term_integrals = [integrate(t, wrt) for t in current.args]
             steps.append({
-                "rule": "power_rule_integral",
+                "rule": "sum_rule_integral",
                 "before_latex": indef,
-                "after_latex": after,
-                "substeps": [{"label": "formula", "value": f"\\frac{{x^{{n+1}}}}{{n+1}}\\Big|_{{n={latex(n)}}}"}],
+                "after_latex": " + ".join(
+                    f"\\int {latex(t)} \\, d{latex(wrt)}" for t in current.args
+                ),
+                "substeps": [
+                    {"label": f"∫ {latex(t)} d{latex(wrt)}", "value": latex(ti) + " + C"}
+                    for t, ti in zip(current.args, term_integrals)
+                ],
             })
-        elif rule == "constant_factor" and isinstance(expr, Mul):
-            consts = [a for a in expr.args if not a.has(wrt)]
-            f_part = [a for a in expr.args if a.has(wrt)]
-            c = sympy.Mul(*consts)
-            f = sympy.Mul(*f_part)
-            f_antideriv = integrate(f, wrt)
-            steps.append({
-                "rule": "constant_factor",
-                "before_latex": indef,
-                "after_latex": f"{latex(c)} \\cdot \\int {latex(f)} \\, d{latex(wrt)}",
-            })
-            steps.append({
-                "rule": _int_rule(f, wrt),
-                "before_latex": f"\\int {latex(f)} \\, d{latex(wrt)}",
-                "after_latex": latex(f_antideriv) + " + C",
-            })
+            antideriv = integrate(current, wrt)
             steps.append({
                 "rule": "simplify",
-                "before_latex": f"{latex(c)} \\cdot ({latex(f_antideriv)})",
-                "after_latex": after,
+                "before_latex": " + ".join(latex(ti) for ti in term_integrals) + " + C",
+                "after_latex": latex(antideriv) + " + C",
             })
         else:
-            steps.append({"rule": rule, "before_latex": indef, "after_latex": after})
+            antideriv = integrate(current, wrt)
+            if bounds:
+                # Construct from validated Python numbers — never from strings (SECURITY_POLICY.md)
+                _lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
+                _hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
+                after = f"{latex(antideriv)} \\Big|_{{{latex(_lo)}}}^{{{latex(_hi)}}}"
+            else:
+                after = f"{latex(antideriv)} + C"
 
-    if bounds:
-        lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
-        hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
-        result = integrate(expr, (wrt, lo, hi))
-        antideriv_sym = integrate(expr, wrt)
-        bound_latex = f"{latex(antideriv_sym)} \\Big|_{{{latex(lo)}}}^{{{latex(hi)}}}"
-        steps.append({
-            "rule": "evaluate_bounds",
-            "before_latex": bound_latex,
-            "after_latex": latex(result),
-            "substeps": [
-                {"label": f"at {latex(wrt)}={latex(hi)}", "value": latex(antideriv_sym.subs(wrt, hi))},
-                {"label": f"at {latex(wrt)}={latex(lo)}", "value": latex(antideriv_sym.subs(wrt, lo))},
-                {"label": "difference", "value": latex(result)},
-            ],
-        })
-        return result, steps
-    else:
-        return integrate(expr, wrt), steps
+            # For power rule, show the formula explicitly
+            if rule == "power_rule_integral" and isinstance(current, (Pow, Symbol)):
+                n = current.args[1] if isinstance(current, Pow) else sympy.Integer(1)
+                steps.append({
+                    "rule": "power_rule_integral",
+                    "before_latex": indef,
+                    "after_latex": after,
+                    "substeps": [{"label": "formula", "value": f"\\frac{{x^{{n+1}}}}{{n+1}}\\Big|_{{n={latex(n)}}}"}],
+                })
+            elif rule == "constant_factor" and isinstance(current, Mul):
+                consts = [a for a in current.args if not a.has(wrt)]
+                f_part = [a for a in current.args if a.has(wrt)]
+                c = sympy.Mul(*consts)
+                f = sympy.Mul(*f_part)
+                f_antideriv = integrate(f, wrt)
+                steps.append({
+                    "rule": "constant_factor",
+                    "before_latex": indef,
+                    "after_latex": f"{latex(c)} \\cdot \\int {latex(f)} \\, d{latex(wrt)}",
+                })
+                steps.append({
+                    "rule": _int_rule(f, wrt),
+                    "before_latex": f"\\int {latex(f)} \\, d{latex(wrt)}",
+                    "after_latex": latex(f_antideriv) + " + C",
+                })
+                steps.append({
+                    "rule": "simplify",
+                    "before_latex": f"{latex(c)} \\cdot ({latex(f_antideriv)})",
+                    "after_latex": after,
+                })
+            else:
+                steps.append({"rule": rule, "before_latex": indef, "after_latex": after})
+
+        if bounds:
+            lo = sympy.Integer(bounds[0]) if isinstance(bounds[0], int) else sympy.Float(bounds[0])
+            hi = sympy.Integer(bounds[1]) if isinstance(bounds[1], int) else sympy.Float(bounds[1])
+            result = integrate(current, (wrt, lo, hi))
+            antideriv_sym = integrate(current, wrt)
+            bound_latex = f"{latex(antideriv_sym)} \\Big|_{{{latex(lo)}}}^{{{latex(hi)}}}"
+            steps.append({
+                "rule": "evaluate_bounds",
+                "before_latex": bound_latex,
+                "after_latex": latex(result),
+                "substeps": [
+                    {"label": f"at {latex(wrt)}={latex(hi)}", "value": latex(antideriv_sym.subs(wrt, hi))},
+                    {"label": f"at {latex(wrt)}={latex(lo)}", "value": latex(antideriv_sym.subs(wrt, lo))},
+                    {"label": "difference", "value": latex(result)},
+                ],
+            })
+            current = result
+        else:
+            current = integrate(current, wrt)
+
+    return current, steps
 
 
 # ── Numeric sampling ────────────────────────────────────────────────────────
@@ -550,65 +556,95 @@ def _error(code: str, message: str, status: int = 422) -> dict:
 def handle(body: dict) -> dict:
     """
     POST /solve
-      expr       string  required
-      operation  string  required  "derivative" | "integral"
-      wrt        string  required  x | y | z | t
-      order      int     optional  1–5 (derivative only, default 1)
-      bounds     list    optional  [lower, upper] (integral only)
+      expr                 string  required
+      operation            string  required  "derivative" | "integral"
+      wrt_sequence         list    optional  e.g. ["x", "y"]
+      integration_sequence list    optional  e.g. [{"wrt": "x", "bounds": [0, 1]}]
     """
     expr_str  = body.get("expr", "")
     operation = body.get("operation", "")
-    wrt_str   = body.get("wrt", "x")
 
     if not expr_str:
         return _error("malformed_request", "Field 'expr' is required.", 400)
     if operation not in ("derivative", "integral"):
         return _error("malformed_request", "'operation' must be 'derivative' or 'integral'.", 400)
-    if wrt_str not in {"x", "y", "z", "t"}:
-        return _error("invalid_expression", f"Variable '{wrt_str}' not allowed.")
 
     try:
         expr = safe_parse(expr_str)
     except ExpressionError as e:
         return _error("invalid_expression", str(e))
 
-    wrt = symbols(wrt_str)
-
     try:
         if operation == "derivative":
-            order_raw = body.get("order", 1)
-            if isinstance(order_raw, bool):
-                return _error("malformed_request", "'order' must be an integer.", 400)
-            try:
-                order_number = float(order_raw)
-                if not math.isfinite(order_number) or not order_number.is_integer():
-                    raise ValueError
-                order = max(1, min(int(order_number), 5))
-            except (TypeError, ValueError, OverflowError):
-                return _error("malformed_request", "'order' must be an integer.", 400)
+            wrt_sequence_raw = body.get("wrt_sequence")
+            if wrt_sequence_raw is not None:
+                if not isinstance(wrt_sequence_raw, list) or not all(isinstance(v, str) for v in wrt_sequence_raw):
+                    return _error("malformed_request", "'wrt_sequence' must be a list of strings.", 400)
+                if not wrt_sequence_raw:
+                    wrt_sequence_raw = ["x"]
+            else:
+                wrt_str = body.get("wrt", "x")
+                order_raw = body.get("order", 1)
+                try:
+                    order = int(order_raw)
+                    wrt_sequence_raw = [wrt_str] * order
+                except (ValueError, TypeError):
+                    return _error("malformed_request", "'order' must be an integer.", 400)
+
+            wrt_sequence = []
+            for v in wrt_sequence_raw:
+                if v not in {"x", "y", "z", "t"}:
+                    return _error("invalid_expression", f"Variable '{v}' not allowed.")
+                wrt_sequence.append(symbols(v))
+
             with calculation_timeout(12):
-                result, steps = _derivative_steps(expr, wrt, order)
+                result, steps = _derivative_steps(expr, wrt_sequence)
+            
+            primary_wrt = wrt_sequence[-1]
+            primary_wrt_str = str(primary_wrt)
+
         else:
-            bounds = body.get("bounds", None)
-            if bounds is not None:
-                if not isinstance(bounds, list) or len(bounds) != 2:
-                    return _error("malformed_request",
-                                  "'bounds' must be a two-element array [lower, upper].", 400)
-                validated_bounds = []
-                for i, b in enumerate(bounds):
-                    if not isinstance(b, (int, float)) or isinstance(b, bool):
-                        return _error("malformed_request",
-                                      f"bounds[{i}] must be a number, got {type(b).__name__}.", 400)
-                    if not math.isfinite(b):
-                        return _error("malformed_request", f"bounds[{i}] must be finite.", 400)
-                    validated_bounds.append(b)
-                bounds = validated_bounds
+            integration_sequence_raw = body.get("integration_sequence")
+            if integration_sequence_raw is not None:
+                if not isinstance(integration_sequence_raw, list):
+                    return _error("malformed_request", "'integration_sequence' must be a list.", 400)
+                if not integration_sequence_raw:
+                    integration_sequence_raw = [{"wrt": "x", "bounds": None}]
+            else:
+                wrt_str = body.get("wrt", "x")
+                bounds = body.get("bounds", None)
+                integration_sequence_raw = [{"wrt": wrt_str, "bounds": bounds}]
+            
+            integration_sequence = []
+            for item in integration_sequence_raw:
+                v = item.get("wrt", "x")
+                if v not in {"x", "y", "z", "t"}:
+                    return _error("invalid_expression", f"Variable '{v}' not allowed.")
+                
+                bounds = item.get("bounds")
+                validated_bounds = None
+                if bounds is not None:
+                    if not isinstance(bounds, list) or len(bounds) != 2:
+                        return _error("malformed_request", "'bounds' must be a two-element array [lower, upper].", 400)
+                    validated_bounds = []
+                    for i, b in enumerate(bounds):
+                        if not isinstance(b, (int, float)) or isinstance(b, bool):
+                            return _error("malformed_request", f"bounds[{i}] must be a number.", 400)
+                        if not math.isfinite(b):
+                            return _error("malformed_request", f"bounds[{i}] must be finite.", 400)
+                        validated_bounds.append(b)
+                
+                integration_sequence.append({"wrt": symbols(v), "bounds": validated_bounds})
+            
             with calculation_timeout(12):
-                result, steps = _integral_steps(expr, wrt, bounds)
+                result, steps = _integral_steps(expr, integration_sequence)
+            
+            primary_wrt = integration_sequence[-1]["wrt"]
+            primary_wrt_str = str(primary_wrt)
 
         narration = {}
-        steps  = _gemini_narrate(steps, wrt_str, narration)
-        samples = _numeric_sample(result, wrt, wrt_name=wrt_str)
+        steps  = _gemini_narrate(steps, primary_wrt_str, narration)
+        samples = _numeric_sample(result, primary_wrt, wrt_name=primary_wrt_str)
 
         return {
             "statusCode": 200,

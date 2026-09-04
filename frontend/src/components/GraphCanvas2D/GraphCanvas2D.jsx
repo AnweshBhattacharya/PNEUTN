@@ -238,6 +238,8 @@ export default function GraphCanvas2D({
   markedX = null,
   xRangeMin = null,
   xRangeMax = null,
+  xRange = null,
+  yRange = null,
   extraVars = {},
 }) {
   const mountRef        = useRef(null)
@@ -711,6 +713,30 @@ export default function GraphCanvas2D({
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => obs.disconnect()
   }, [])
+
+  // ── Viewport slider → camera (xRange / yRange from SliderSidebar) ────────
+  useEffect(() => {
+    if (!xRange || !cameraRef.current) return
+    const cam = cameraRef.current
+    const mount = mountRef.current
+    const W = mount?.clientWidth || 600
+    const H = mount?.clientHeight || 400
+    const aspect = W / H
+    const [xL, xR] = xRange
+    const halfY = (xR - xL) / 2 / aspect
+    const yCentre = yRange ? (yRange[0] + yRange[1]) / 2 : 0
+    cam.left = xL; cam.right = xR
+    cam.bottom = yCentre - halfY; cam.top = yCentre + halfY
+    cam.updateProjectionMatrix()
+    setViewBounds([xL, xR, cam.bottom, cam.top])
+    buildStaticGeo()
+    resampleAll()
+  }, [xRange, yRange, buildStaticGeo, resampleAll])
+
+  // ── extraVars change → resample (free-param sliders) ────────────────────
+  useEffect(() => {
+    resampleAll()
+  }, [extraVars, resampleAll])
 
   // ── Grid toggle effect ───────────────────────────────────────────────────
   useEffect(() => {

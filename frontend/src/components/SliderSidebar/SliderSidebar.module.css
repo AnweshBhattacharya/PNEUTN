@@ -1,0 +1,181 @@
+/* SliderSidebar.module.css — RawBlock compliant */
+
+.sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  border-right: 2px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2);
+  background: var(--surface-raised);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebarTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+  display: block;
+  padding: 2px 0;
+}
+
+/* ── Dual range slider ── */
+.dualSlider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sliderLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  letter-spacing: var(--tracking-button);
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+}
+
+.trackWrap {
+  position: relative;
+  height: 24px;
+}
+
+.rangeThumbLo,
+.rangeThumbHi {
+  position: absolute;
+  width: 100%;
+  top: 0;
+  pointer-events: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border-radius: 0;
+  height: 24px;
+  margin: 0;
+}
+
+.rangeThumbLo::-webkit-slider-thumb,
+.rangeThumbHi::-webkit-slider-thumb {
+  pointer-events: all;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 10px;
+  height: 20px;
+  background: var(--content-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+.rangeThumbLo::-webkit-slider-runnable-track,
+.rangeThumbHi::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 4px;
+}
+
+.rangeThumbLo::-moz-range-thumb,
+.rangeThumbHi::-moz-range-thumb {
+  pointer-events: all;
+  width: 10px;
+  height: 20px;
+  background: var(--content-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.trackFill {
+  position: absolute;
+  top: 10px;
+  height: 4px;
+  left: calc(var(--lo, 0) * 100%);
+  right: calc((1 - var(--hi, 1)) * 100%);
+  background: var(--accent);
+  border: 1px solid var(--border-color);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Track baseline */
+.trackWrap::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--border-color);
+  z-index: 0;
+}
+
+.rangeValues {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-secondary);
+}
+
+/* ── Single parameter slider ── */
+.paramSlider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paramHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.paramName {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--content-secondary);
+  font-style: italic;
+}
+
+.paramValue {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.singleRange {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 0;
+  outline: none;
+  cursor: pointer;
+}
+
+.singleRange::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 10px;
+  height: 18px;
+  background: var(--accent);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.singleRange::-moz-range-thumb {
+  width: 10px;
+  height: 18px;
+  background: var(--accent);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  cursor: pointer;
+}

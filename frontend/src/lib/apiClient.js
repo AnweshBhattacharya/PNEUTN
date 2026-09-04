@@ -98,13 +98,13 @@ async function post(path, body, { timeout = 25000 } = {}) {
  * (no URL configured, AbortError from timeout, or DNS/network failure).
  * CORS errors and server errors are surfaced as real errors.
  */
-export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = null }) {
+export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = null, wrt_sequence, integration_sequence }) {
   if (!BASE_URL) {
     console.warn('[apiClient] VITE_API_BASE_URL not set — using local solver')
     return localSolve({ expr, operation, wrt, order, bounds })
   }
   try {
-    return await post('/solve', { expr, operation, wrt, order, bounds })
+    return await post('/solve', { expr, operation, wrt, order, bounds, wrt_sequence, integration_sequence })
   } catch (e) {
     // Only fall back on genuine network unavailability
     const isUnreachable =
