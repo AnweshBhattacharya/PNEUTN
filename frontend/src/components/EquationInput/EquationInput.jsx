@@ -129,10 +129,8 @@ export default function EquationInput({ value, onChange, onSolve, loading,
 
   const handleSolve = () => {
     if (!mlRef.current) return
-    // `value` is updated on every MathLive input event and has already been
-    // normalized. Prefer it so a submit cannot reintroduce MathLive's spaced
-    // function serialization (for example `s i n(x)`).
-    const expr = normaliseMathExpression(value || getExpressionValue(mlRef.current))
+    const rawVal = getExpressionValue(mlRef.current) || value || ''
+    const expr = normaliseMathExpression(rawVal)
     const err = validateExpr(expr)
     if (err) { setBalanceError(err); return }
     setBalanceError(null)
@@ -151,28 +149,31 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       }
     }
 
+    const intSeq = integrationSequence.map(i => ({
+      wrt: i.wrt,
+      bounds: i.boundsEnabled ? [parseFloat(i.boundLo), parseFloat(i.boundHi)] : null,
+    }))
+
     onSolve?.({
       expr,
       operation,
       wrtSequence: operation === 'derivative' ? wrtSequence : undefined,
-      integrationSequence: operation === 'integral'
-        ? integrationSequence.map(i => ({
-            wrt: i.wrt,
-            bounds: i.boundsEnabled ? [parseFloat(i.boundLo), parseFloat(i.boundHi)] : null,
-          }))
-        : undefined,
+      wrt_sequence: operation === 'derivative' ? wrtSequence : undefined,
+      integrationSequence: operation === 'integral' ? intSeq : undefined,
+      integration_sequence: operation === 'integral' ? intSeq : undefined,
       // total_derivative params — dep_vars: [] means backend auto-detects free symbols
       dep_vars: operation === 'total_derivative' ? [] : undefined,
       wrt: operation === 'total_derivative'
         ? totalWrt
         : operation === 'derivative'
-          ? wrtSequence[wrtSequence.length - 1]
-          : integrationSequence[integrationSequence.length - 1].wrt,
-      order: operation === 'derivative' ? wrtSequence.length : 1,
-      bounds: operation === 'integral' && integrationSequence[integrationSequence.length - 1].boundsEnabled
+          ? (wrtSequence[wrtSequence.length - 1] || 'x')
+          : (integrationSequence[integrationSequence.length - 1]?.wrt || 'x'),
+      order: operation === 'derivative' ? (wrtSequence.length || 1) : 1,
+      bounds: operation === 'integral' && integrationSequence[integrationSequence.length - 1]?.boundsEnabled
         ? [parseFloat(integrationSequence[integrationSequence.length - 1].boundLo), parseFloat(integrationSequence[integrationSequence.length - 1].boundHi)]
         : null,
-    })  }
+    })
+  }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSolve()
@@ -353,7 +354,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
               <div className={styles.stepperRow}>
                 <button className={styles.stepperBtn} type="button" disabled={integrationSequence.length <= 1} onClick={() => setIntegrationSequence(p => p.slice(1))}>−</button>
                 <span className={styles.stepperValue}>{integrationSequence.length}</span>
-                <button className={styles.stepperBtn} type="button" disabled={integrationSequence.length >= 3} onClick={() => setIntegrationSequence(p => [{ wrt: wrtOptions[0], boundsEnabled: false, boundLo: '0', boundHi: '1' }, ...p])}>+</button>
+                <button className={styles.stepperBtn} type="button" disabled={integrationSequence.length >= 3} onClick={() => setIntegrationSequence(p => [{ wrt: wrtOptions[0] || 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }, ...p])}>+</button>
               </div>
             </div>
 

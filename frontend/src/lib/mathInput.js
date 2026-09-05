@@ -10,9 +10,23 @@ const FUNCTION_NAMES = [
 ]
 
 export function normaliseMathExpression(value) {
+  if (!value || typeof value !== 'string') return ''
   let expression = value
 
-  // MathLive can serialize manually typed function names as `s i n(x)`.
+  // 1. Normalize Unicode symbols
+  // Multiplication: U+2217 (∗), U+00D7 (×), U+00B7 (·), U+22C5 (⋅), U+2062 (invisible times)
+  expression = expression.replace(/[\u2217\u00d7\u00b7\u22c5\u2062]/g, '*')
+  // Minus: U+2212 (−), U+2013 (–), U+2014 (—)
+  expression = expression.replace(/[\u2212\u2013\u2014]/g, '-')
+  // Division: U+00F7 (÷)
+  expression = expression.replace(/\u00f7/g, '/')
+
+  // 2. MathLive AsciiMath uses `**` for asterisk multiplication or `xx` for \times
+  expression = expression.replace(/\s*\*\*\s*/g, ' * ')
+  expression = expression.replace(/\bxx\b/g, '*')
+  expression = expression.replace(/\\cdot|\\times/g, '*')
+
+  // 3. MathLive can serialize manually typed function names as `s i n(x)`.
   // Rejoin only supported function names immediately before an opening
   // parenthesis, leaving legitimate implicit multiplication untouched.
   for (const name of FUNCTION_NAMES) {

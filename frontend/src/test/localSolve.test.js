@@ -26,6 +26,14 @@ describe('localSolve', () => {
       const res = localSolve({ expr: '42', operation: 'derivative', wrt: 'x', order: 1 })
       expect(res.steps[0].rule).toBe('constant')
     })
+
+    it('computes derivative of expression with parameters a*x^2 + b*x + c', () => {
+      const res = localSolve({ expr: 'a*x^2 + b*x + c', operation: 'derivative', wrt: 'x', order: 1 })
+      expect(res._local).toBe(true)
+      expect(res._error).toBeUndefined()
+      expect(res.result_latex).not.toContain('error')
+      expect(res.steps.length).toBeGreaterThan(0)
+    })
   })
 
   describe('integral', () => {
@@ -52,6 +60,16 @@ describe('localSolve', () => {
     it('handles exponential integrals', () => {
       const res = localSolve({ expr: 'exp(x)', operation: 'integral', wrt: 'x' })
       expect(res.result_latex).toContain('exp')
+    })
+  })
+
+  describe('total_derivative', () => {
+    it('computes multivariable total derivative with chain rule steps', () => {
+      const res = localSolve({ expr: 'x^2 * y', operation: 'total_derivative', wrt: 't' })
+      expect(res._local).toBe(true)
+      expect(res.steps.some(s => s.rule === 'chain_rule')).toBe(true)
+      expect(res.steps.some(s => s.rule === 'partial_derivative')).toBe(true)
+      expect(res.result_latex).toContain('dt')
     })
   })
 

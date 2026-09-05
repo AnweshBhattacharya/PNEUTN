@@ -98,13 +98,46 @@ async function post(path, body, { timeout = 25000 } = {}) {
  * (no URL configured, AbortError from timeout, or DNS/network failure).
  * CORS errors and server errors are surfaced as real errors.
  */
-export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = null, wrt_sequence, integration_sequence, dep_vars }) {
+export async function solve({
+  expr,
+  operation,
+  wrt = 'x',
+  order = 1,
+  bounds = null,
+  wrt_sequence,
+  integration_sequence,
+  wrtSequence,
+  integrationSequence,
+  dep_vars,
+}) {
+  const actualWrtSeq = wrt_sequence || wrtSequence
+  const actualIntSeq = integration_sequence || integrationSequence
+
   if (!BASE_URL) {
     console.warn('[apiClient] VITE_API_BASE_URL not set — using local solver')
-    return localSolve({ expr, operation, wrt, order, bounds })
+    return localSolve({
+      expr,
+      operation,
+      wrt,
+      order,
+      bounds,
+      wrt_sequence: actualWrtSeq,
+      wrtSequence: actualWrtSeq,
+      integration_sequence: actualIntSeq,
+      integrationSequence: actualIntSeq,
+    })
   }
   try {
-    return await post('/solve', { expr, operation, wrt, order, bounds, wrt_sequence, integration_sequence, dep_vars })
+    return await post('/solve', {
+      expr,
+      operation,
+      wrt,
+      order,
+      bounds,
+      wrt_sequence: actualWrtSeq,
+      integration_sequence: actualIntSeq,
+      dep_vars,
+    })
   } catch (e) {
     // Only fall back on genuine network unavailability
     const isUnreachable =
@@ -113,7 +146,20 @@ export async function solve({ expr, operation, wrt = 'x', order = 1, bounds = nu
       (e instanceof TypeError && /fetch|network|failed/i.test(e.message))
     if (isUnreachable) {
       console.warn('[apiClient] Backend unreachable — using local solver:', e.message)
-      return { ...localSolve({ expr, operation, wrt, order, bounds }), _local: true }
+      return {
+        ...localSolve({
+          expr,
+          operation,
+          wrt,
+          order,
+          bounds,
+          wrt_sequence: actualWrtSeq,
+          wrtSequence: actualWrtSeq,
+          integration_sequence: actualIntSeq,
+          integrationSequence: actualIntSeq,
+        }),
+        _local: true,
+      }
     }
     throw e
   }

@@ -61,28 +61,34 @@ function narrate(rule) {
  * Compute d/d{wrt} of exprStr numerically-verified steps.
  * Returns { result_latex, steps, result_numeric_sample } matching the API shape.
  */
-function derivativeSteps(exprStr, wrt, order) {
+function derivativeSteps(exprStr, wrt, order, wrtSequence = null) {
   const steps = []
   let current = exprStr
+  const seq = Array.isArray(wrtSequence) && wrtSequence.length > 0
+    ? wrtSequence
+    : Array(Math.max(1, order)).fill(wrt)
 
-  for (let i = 0; i < order; i++) {
+  for (let i = 0; i < seq.length; i++) {
+    const curWrt = seq[i]
     let result
     let rule = 'default'
     try {
       // math.js derivative
       const node = math.parse(current)
-      const derived = math.derivative(node, wrt)
+      const derived = math.derivative(node, curWrt)
       result = derived.toString()
 
       // Heuristic rule detection on the *input* node
-      rule = detectDiffRule(node, wrt)
+      rule = detectDiffRule(node, curWrt)
     } catch {
       // math.js can't differentiate this — produce a numerical note
       result = current
       rule = 'default'
     }
 
-    const beforeLatex = `\\frac{d${i > 0 ? `^{${i + 1}}` : ''}}{d${wrt}${i > 0 ? `^{${i + 1}}` : ''}}\\left[${toLatex(current)}\\right]`
+    const beforeLatex = seq.length > 1 && new Set(seq).size > 1
+      ? `\\frac{\\partial}{\\partial ${curWrt}}\\left[${toLatex(current)}\\right]`
+      : `\\frac{d${i > 0 ? `^{${i + 1}}` : ''}}{d${curWrt}${i > 0 ? `^{${i + 1}}` : ''}}\\left[${toLatex(current)}\\right]`
     const afterLatex  = toLatex(result)
 
     steps.push({
@@ -96,6 +102,72 @@ function derivativeSteps(exprStr, wrt, order) {
   }
 
   return { finalExpr: current, steps }
+}
+
+function totalDerivativeSteps(exprStr, wrt) {
+  const steps = []
+  let node
+  try {
+    node = math.parse(exprStr)
+  } catch {
+    return { finalExpr: exprStr, resultLatex: toLatex(exprStr), steps: [] }
+  }
+
+  const allSymbols = new Set()
+  node.traverse(n => {
+    if (n.type === 'SymbolNode' && /^[a-zA-Z]$/.test(n.name) && n.name !== wrt && n.name !== 'e' && n.name !== 'E' && n.name !== 'i' && n.name !== 'I' && n.name !== 'pi') {
+      allSymbols.add(n.name)
+    }
+  })
+
+  const vars = [...allSymbols].sort()
+  if (vars.length === 0) {
+    const derived = derivativeSteps(exprStr, wrt, 1)
+    return { finalExpr: derived.finalExpr, resultLatex: toLatex(derived.finalExpr), steps: derived.steps }
+  }
+
+  const chainRuleFormula = vars.map(v => `\\frac{\\partial f}{\\partial ${v}} \\frac{d${v}}{d${wrt}}`).join(' + ')
+  const partials = []
+  const terms = []
+
+  for (const v of vars) {
+    let partialExpr = '0'
+    try {
+      const d = math.derivative(node, v)
+      partialExpr = d.toString()
+    } catch {
+      partialExpr = `\\frac{\\partial}{\\partial ${v}}[${exprStr}]`
+    }
+    const partLatex = toLatex(partialExpr)
+    partials.push({ v, partLatex })
+    terms.push(`\\left(${partLatex}\\right) \\frac{d${v}}{d${wrt}}`)
+  }
+
+  const resultLatex = terms.join(' + ')
+
+  steps.push({
+    rule: 'chain_rule',
+    before_latex: `\\frac{df}{d${wrt}} = ${chainRuleFormula}`,
+    after_latex: resultLatex,
+    explanation: `Total Derivative: df/d${wrt} is the sum of partial derivatives multiplied by each variable's rate of change with respect to ${wrt}.`,
+    narrated_by: 'fallback_template',
+  })
+
+  for (const p of partials) {
+    steps.push({
+      rule: 'partial_derivative',
+      before_latex: `\\frac{\\partial}{\\partial ${p.v}}\\left[${toLatex(exprStr)}\\right]`,
+      after_latex: p.partLatex,
+      explanation: `Partial derivative of f with respect to ${p.v}, treating all other variables as constants.`,
+      narrated_by: 'fallback_template',
+      substeps: [
+        { label: `∂f/∂${p.v}`, value: p.partLatex },
+        { label: 'contribution', value: `${p.partLatex} \\cdot \\frac{d${p.v}}{d${wrt}}` },
+      ],
+    })
+  }
+
+  return { finalExpr: exprStr, resultLatex, steps }
 }
 
 function detectDiffRule(node, wrt) {
@@ -297,26 +369,50 @@ function numericSample(exprStr, wrt) {
  * @param {object} params  { expr, operation, wrt, order, bounds }
  * @returns {{ result_latex, result_numeric_sample, steps, _local: true }}
  */
-export function localSolve({ expr, operation, wrt = 'x', order = 1, bounds = null }) {
+export function localSolve({
+  expr,
+  operation,
+  wrt = 'x',
+  order = 1,
+  bounds = null,
+  wrt_sequence,
+  wrtSequence,
+  integration_sequence,
+  integrationSequence,
+}) {
+  const actualWrtSeq = wrtSequence || wrt_sequence
+  const actualIntSeq = integrationSequence || integration_sequence
+
   try {
     // Keep offline mode inside the same expression grammar as the graph and
     // backend. The raw math.js helpers below are used only after this guard.
     if (!compileExpr(expr)) {
       throw new Error('Enter a supported mathematical expression.')
     }
-    if (operation === 'derivative') {
-      const { finalExpr, steps } = derivativeSteps(expr, wrt, order)
+    if (operation === 'total_derivative') {
+      const { resultLatex, finalExpr, steps } = totalDerivativeSteps(expr, wrt)
       return {
-        result_latex: toLatex(finalExpr),
+        result_latex: resultLatex ?? toLatex(finalExpr),
         result_numeric_sample: numericSample(finalExpr, wrt),
         steps,
         _local: true,
       }
+    } else if (operation === 'derivative') {
+      const primaryWrt = actualWrtSeq?.[actualWrtSeq.length - 1] || wrt
+      const { finalExpr, steps } = derivativeSteps(expr, wrt, order, actualWrtSeq)
+      return {
+        result_latex: toLatex(finalExpr),
+        result_numeric_sample: numericSample(finalExpr, primaryWrt),
+        steps,
+        _local: true,
+      }
     } else {
-      const { resultLatex, finalExpr, steps } = integralSteps(expr, wrt, bounds)
+      const primaryWrt = actualIntSeq?.[actualIntSeq.length - 1]?.wrt || wrt
+      const finalBounds = actualIntSeq?.[actualIntSeq.length - 1]?.bounds ?? bounds
+      const { resultLatex, finalExpr, steps } = integralSteps(expr, primaryWrt, finalBounds)
       return {
         result_latex: resultLatex ?? toLatex(finalExpr),
-        result_numeric_sample: numericSample(finalExpr, wrt),
+        result_numeric_sample: numericSample(finalExpr, primaryWrt),
         steps,
         _local: true,
       }

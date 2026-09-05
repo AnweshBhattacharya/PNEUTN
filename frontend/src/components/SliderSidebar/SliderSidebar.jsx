@@ -33,14 +33,14 @@ function DualRangeSlider({ label, min = -20, max = 20, value, onChange, step = 0
         <div
           className={styles.trackFill}
           style={{
-            '--lo': (lo - min) / range,
-            '--hi': (hi - min) / range,
+            '--lo': range > 0 ? Math.max(0, Math.min(1, (lo - min) / range)) : 0,
+            '--hi': range > 0 ? Math.max(0, Math.min(1, (hi - min) / range)) : 1,
           }}
         />
       </div>
       <div className={styles.rangeValues}>
-        <span>{lo}</span>
-        <span>{hi}</span>
+        <span>{Number.isInteger(lo) ? lo : Number(lo).toFixed(1)}</span>
+        <span>{Number.isInteger(hi) ? hi : Number(hi).toFixed(1)}</span>
       </div>
     </div>
   )
@@ -106,8 +106,8 @@ export default function SliderSidebar({
       />
 
       {freeParams.length > 0 && (
-        <>
-          <span className={styles.sidebarTitle} style={{ marginTop: 12 }}>Parameters</span>
+        <div className={styles.paramSection}>
+          <span className={styles.sidebarTitle} style={{ marginTop: 8 }}>Parameters</span>
           {freeParams.map(({ name, value }) => (
             <ParameterSlider
               key={name}
@@ -116,7 +116,7 @@ export default function SliderSidebar({
               onChange={onParamChange}
             />
           ))}
-        </>
+        </div>
       )}
     </aside>
   )

@@ -17,6 +17,7 @@ describe('detectFreeParams', () => {
 
   it('excludes reserved identifiers like e, pi, inf', () => {
     expect(detectFreeParams('pi * r^2', 'x')).toEqual([])
+    expect(detectFreeParams('E^x + I', 'x')).toEqual([])
   })
 
   it('handles empty or null inputs', () => {

@@ -11,6 +11,11 @@ import styles from './ParameterDisplay.module.css'
  *   yRange:       [number, number]
  *   paramValues:  Record<string, number>
  */
+function fmtVal(n) {
+  if (n == null || !isFinite(n)) return '0'
+  return Number.isInteger(n) ? String(n) : Number(n).toFixed(2)
+}
+
 export default function ParameterDisplay({ xRange = [-10, 10], yRange = [-10, 10], paramValues = {} }) {
   const entries = Object.entries(paramValues)
 
@@ -18,11 +23,11 @@ export default function ParameterDisplay({ xRange = [-10, 10], yRange = [-10, 10
     <div className={styles.overlay} aria-label="Current viewport and parameter values">
       <div className={styles.row}>
         <span className={styles.key}>x</span>
-        <span className={styles.val}>[{xRange[0]}, {xRange[1]}]</span>
+        <span className={styles.val}>[{fmtVal(xRange[0])}, {fmtVal(xRange[1])}]</span>
       </div>
       <div className={styles.row}>
         <span className={styles.key}>y</span>
-        <span className={styles.val}>[{yRange[0]}, {yRange[1]}]</span>
+        <span className={styles.val}>[{fmtVal(yRange[0])}, {fmtVal(yRange[1])}]</span>
       </div>
       {entries.map(([name, value]) => (
         <div key={name} className={styles.row}>

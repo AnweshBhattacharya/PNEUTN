@@ -884,6 +884,7 @@ export default function App() {
                   zMaxLimit={zMax3D}
                   n={n3D}
                   samplePoint={samplePoint3D}
+                  extraVars={paramValues}
                   showVolume={showVolume3D}
                   showGrid={showGrid3D}
                   showWireframe={showWireframe3D}

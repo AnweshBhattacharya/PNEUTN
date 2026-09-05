@@ -71,10 +71,14 @@ function validateNode(node) {
 }
 
 function parseSafeExpression(exprStr) {
-  if (typeof exprStr !== 'string' || exprStr.length > 200 || !SAFE_CHARACTERS.test(exprStr)) {
+  if (typeof exprStr !== 'string' || exprStr.length > 200) {
     throw new Error('Invalid expression')
   }
-  const node = parseExpression(normaliseForEvaluation(exprStr))
+  const normalised = normaliseForEvaluation(exprStr)
+  if (!SAFE_CHARACTERS.test(normalised)) {
+    throw new Error('Invalid expression')
+  }
+  const node = parseExpression(normalised)
   validateNode(node)
   return node
 }

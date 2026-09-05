@@ -1,6 +1,6 @@
 // Reserved identifiers — not free parameters
 const RESERVED = new Set([
-  'x', 'y', 'z', 't', 'e', 'i', 'pi', 'inf', 'Infinity', 'true', 'false',
+  'x', 'y', 'z', 't', 'e', 'E', 'i', 'I', 'pi', 'PI', 'inf', 'Infinity', 'true', 'false',
   // known math.js single-letter function aliases
   'n', 'o', 'p', 'q', 'r', 's', 'u', 'v', 'w',
 ])

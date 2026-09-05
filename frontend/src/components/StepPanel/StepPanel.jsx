@@ -116,10 +116,14 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
 
   const copyResult = () => {
     if (!result) return
-    navigator.clipboard?.writeText(result).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }).catch(() => {})
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(result)
+        .then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        })
+        .catch(() => {})
+    }
   }
 
   return (

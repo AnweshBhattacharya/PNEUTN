@@ -41,6 +41,11 @@ describe('mathEval', () => {
 
       const parameterized = compileExpr('a * x')
       expect(evalAt(parameterized, { x: 3, a: 2 })).toBe(6)
+
+      // MathLive U+2217 asterisk serialization
+      const unicodeCompiled = compileExpr('a\u2217x^2 + b\u2217x + c')
+      expect(unicodeCompiled).not.toBeNull()
+      expect(evalAt(unicodeCompiled, { x: 2, a: 3, b: 4, c: 5 })).toBe(25)
     })
   })
 
