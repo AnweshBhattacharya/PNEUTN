@@ -858,14 +858,17 @@ export default function App() {
                         <span>{activeEq.expr}</span>
                       </div>
                       <div className={styles.samplePointGrid}>
-                        {activeEq.numericSample.slice(0, 7).map(({ x, y }, i) => (
-                          <div key={i} className={styles.samplePointCard}>
-                            <span className={styles.samplePointLabel}>x</span>
-                            <span className={styles.samplePointValue}>{x}</span>
-                            <span className={styles.samplePointLabel}>y</span>
-                            <span className={styles.samplePointValue}>{y}</span>
-                          </div>
-                        ))}
+                        {activeEq.numericSample.slice(0, 7).map((pt, i) => {
+                            const wrtKey = Object.keys(pt).find(k => k !== 'y') ?? 'x'
+                            return (
+                              <div key={i} className={styles.samplePointCard}>
+                                <span className={styles.samplePointLabel}>{wrtKey}</span>
+                                <span className={styles.samplePointValue}>{pt[wrtKey]}</span>
+                                <span className={styles.samplePointLabel}>y</span>
+                                <span className={styles.samplePointValue}>{pt.y}</span>
+                              </div>
+                            )
+                          })}
                       </div>
                     </section>
                   )}

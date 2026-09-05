@@ -413,6 +413,98 @@ def _split_product(expr: sympy.Expr, wrt: Symbol):
     return args[0], sympy.Mul(*args[1:]) if len(args) > 1 else sympy.Integer(1)
 
 
+# ── Total derivative step extraction ───────────────────────────────────────
+
+def _total_derivative_steps(expr: sympy.Expr, wrt: sympy.Symbol, dep_vars: list[sympy.Symbol]) -> tuple[sympy.Expr, list[dict]]:
+    """
+    Compute df/d(wrt) using the multi-variable chain rule.
+
+    dep_vars: variables in expr that depend on wrt (e.g. x, y if wrt = t).
+    If dep_vars is empty, treats all free symbols except wrt as dependents.
+
+    Returns the general form:
+      df/dt = ∂f/∂x₁ · dx₁/dt + ∂f/∂x₂ · dx₂/dt + ...
+    with symbolic dx_i/dt terms (not substituted).
+    """
+    steps: list[dict] = []
+    free = expr.free_symbols - {wrt}
+
+    if not dep_vars:
+        dep_vars = sorted(free, key=str)
+
+    if not dep_vars:
+        # No dependencies — result is 0
+        steps.append({
+            "rule": "constant",
+            "before_latex": latex(expr),
+            "after_latex": "0",
+            "explanation": _narrate("constant", str(wrt)),
+            "narrated_by": "fallback_template",
+        })
+        return sympy.Integer(0), steps
+
+    wrt_str = latex(wrt)
+
+    # Build chain rule sum.
+    # Use plain clean symbols (e.g. `dxdt`) for the algebraic result so
+    # SymPy's own latex() call never encounters backslashes in symbol names.
+    terms_algebraic = []
+    partial_labels  = []
+
+    for v in dep_vars:
+        v_str         = latex(v)
+        partial       = sympy.diff(expr, v)
+        # Clean Python identifier for SymPy algebra -- never serialised as LaTeX itself
+        dummy_name    = f"d{str(v)}d{str(wrt)}"
+        dv_dwrt_sym   = sympy.Symbol(dummy_name)           # e.g. Symbol("dxdt")
+        dv_dwrt_latex = f"\\frac{{d{v_str}}}{{d{wrt_str}}}"  # the display form
+        terms_algebraic.append(partial * dv_dwrt_sym)
+        partial_labels.append((v, v_str, partial, dv_dwrt_sym, dv_dwrt_latex))
+
+    # Build result LaTeX manually: Σ partial * (dv/dwrt)
+    result_latex_parts = []
+    for _, v_str, partial, _, dv_dwrt_latex in partial_labels:
+        result_latex_parts.append(f"{latex(partial)} \\cdot {dv_dwrt_latex}")
+    result_latex = " + ".join(result_latex_parts)
+
+    # Algebraic result (uses clean dummy symbols, safe to pass through SymPy)
+    result = sympy.Add(*terms_algebraic)
+
+    # Step 1: chain rule template
+    template_parts = " + ".join(
+        f"\\frac{{\\partial f}}{{\\partial {v_str}}} \\cdot \\frac{{d{v_str}}}{{d{wrt_str}}}"
+        for _, v_str, _, _, _ in partial_labels
+    )
+    steps.append({
+        "rule": "chain_rule",
+        "before_latex": f"\\frac{{df}}{{d{wrt_str}}} = {template_parts}",
+        "after_latex":  result_latex,
+        "explanation": (
+            f"Total Derivative -- Chain Rule: "
+            f"df/d{wrt_str} is the sum of each partial derivative "
+            f"multiplied by the rate of change of that variable with respect to {wrt_str}."
+        ),
+        "narrated_by": "fallback_template",
+    })
+
+    # Step 2: each partial derivative with its contribution
+    for v, v_str, partial, _, dv_dwrt_latex in partial_labels:
+        partial_latex = latex(partial)
+        steps.append({
+            "rule": "partial_derivative",
+            "before_latex": f"\\frac{{\\partial}}{{\\partial {v_str}}}\\left[{latex(expr)}\\right]",
+            "after_latex":  partial_latex,
+            "explanation":  f"Partial derivative of f with respect to {v_str}, treating all other variables as constants.",
+            "narrated_by":  "fallback_template",
+            "substeps": [
+                {"label": f"∂f/∂{v_str}", "value": partial_latex},
+                {"label": "contribution", "value": f"{partial_latex} \\cdot {dv_dwrt_latex}"},
+            ],
+        })
+
+    return result, steps
+
+
 # ── Integral step extraction ────────────────────────────────────────────────
 
 def _integral_steps(expr: sympy.Expr, integration_sequence: list[dict]) -> tuple[sympy.Expr, list[dict]]:
@@ -566,8 +658,8 @@ def handle(body: dict) -> dict:
 
     if not expr_str:
         return _error("malformed_request", "Field 'expr' is required.", 400)
-    if operation not in ("derivative", "integral"):
-        return _error("malformed_request", "'operation' must be 'derivative' or 'integral'.", 400)
+    if operation not in ("derivative", "integral", "total_derivative"):
+        return _error("malformed_request", "'operation' must be 'derivative', 'integral', or 'total_derivative'.", 400)
 
     try:
         expr = safe_parse(expr_str)
@@ -602,6 +694,31 @@ def handle(body: dict) -> dict:
             
             primary_wrt = wrt_sequence[-1]
             primary_wrt_str = str(primary_wrt)
+
+        elif operation == "total_derivative":
+            # wrt: the independent variable to differentiate with respect to (e.g. "t")
+            # dep_vars: optional list of variables in expr that depend on wrt (e.g. ["x", "y"])
+            #           if omitted, all free symbols except wrt are treated as dependents
+            wrt_str = body.get("wrt", "t")
+            if wrt_str not in {"x", "y", "z", "t"}:
+                return _error("invalid_expression", f"Variable '{wrt_str}' not allowed.")
+            wrt_sym = symbols(wrt_str)
+
+            dep_vars_raw = body.get("dep_vars", None)  # optional list of strings
+            dep_vars = []
+            if dep_vars_raw is not None:
+                if not isinstance(dep_vars_raw, list) or not all(isinstance(v, str) for v in dep_vars_raw):
+                    return _error("malformed_request", "'dep_vars' must be a list of strings.", 400)
+                for v in dep_vars_raw:
+                    if v not in {"x", "y", "z", "t"}:
+                        return _error("invalid_expression", f"Variable '{v}' not allowed.")
+                    dep_vars.append(symbols(v))
+
+            with calculation_timeout(12):
+                result, steps = _total_derivative_steps(expr, wrt_sym, dep_vars)
+
+            primary_wrt = wrt_sym
+            primary_wrt_str = wrt_str
 
         else:
             integration_sequence_raw = body.get("integration_sequence")

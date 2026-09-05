@@ -55,6 +55,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   const [integrationSequence, setIntegrationSequence] = useState([
     { wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }
   ])
+  const [totalWrt, setTotalWrt]         = useState('t')  // independent var for df/dt
   const boundsToggleId = 'bounds-toggle'
 
   const wrtOptions = useMemo(() => {
@@ -167,13 +168,24 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       expr,
       operation,
       wrtSequence: operation === 'derivative' ? wrtSequence : undefined,
-      integrationSequence: operation === 'integral' ? integrationSequence.map(i => ({ wrt: i.wrt, bounds: i.boundsEnabled ? [parseFloat(i.boundLo), parseFloat(i.boundHi)] : null })) : undefined,
-      // fallback for old apiClient.js
-      wrt: operation === 'derivative' ? wrtSequence[wrtSequence.length - 1] : integrationSequence[integrationSequence.length - 1].wrt,
+      integrationSequence: operation === 'integral'
+        ? integrationSequence.map(i => ({
+            wrt: i.wrt,
+            bounds: i.boundsEnabled ? [parseFloat(i.boundLo), parseFloat(i.boundHi)] : null,
+          }))
+        : undefined,
+      // total_derivative params — dep_vars: [] means backend auto-detects free symbols
+      dep_vars: operation === 'total_derivative' ? [] : undefined,
+      wrt: operation === 'total_derivative'
+        ? totalWrt
+        : operation === 'derivative'
+          ? wrtSequence[wrtSequence.length - 1]
+          : integrationSequence[integrationSequence.length - 1].wrt,
       order: operation === 'derivative' ? wrtSequence.length : 1,
-      bounds: operation === 'integral' && integrationSequence[integrationSequence.length - 1].boundsEnabled ? [parseFloat(integrationSequence[integrationSequence.length - 1].boundLo), parseFloat(integrationSequence[integrationSequence.length - 1].boundHi)] : null,
-    })
-  }
+      bounds: operation === 'integral' && integrationSequence[integrationSequence.length - 1].boundsEnabled
+        ? [parseFloat(integrationSequence[integrationSequence.length - 1].boundLo), parseFloat(integrationSequence[integrationSequence.length - 1].boundHi)]
+        : null,
+    })  }
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSolve()
@@ -245,6 +257,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
         operation={operation}
         wrtSequence={wrtSequence}
         integrationSequence={integrationSequence}
+        totalWrt={totalWrt}
       />
 
       {/* ── Controls ── */}
@@ -255,8 +268,9 @@ export default function EquationInput({ value, onChange, onSolve, loading,
             <span className={styles.controlLabel}>Op</span>
             <div className={styles.pillGroup} role="group" aria-label="Operation">
               {[
-                { value: 'derivative', label: 'd/dx' },
-                { value: 'integral',   label: '∫ dx'  },
+                { value: 'derivative',       label: 'd/dx'  },
+                { value: 'integral',         label: '∫ dx'  },
+                { value: 'total_derivative', label: 'df/dt' },
               ].map(op => (
                 <button
                   key={op.value}
@@ -271,6 +285,8 @@ export default function EquationInput({ value, onChange, onSolve, loading,
             </div>
           </div>
 
+          {/* Wrt / variable selector — hidden for total_derivative, gradient, divergence, curl */}
+          {!['total_derivative', 'gradient', 'divergence', 'curl'].includes(operation) && (
           <div className={styles.controlGroup}>
             <span className={styles.controlLabel}>{operation === 'derivative' ? 'Wrt Add' : 'Wrt'}</span>
             <div className={styles.pillGroup} role="group" aria-label="Variable">
@@ -296,6 +312,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
               ))}
             </div>
           </div>
+          )}
         </div>
 
         {/* Derivative Sequence Builder */}
@@ -317,6 +334,26 @@ export default function EquationInput({ value, onChange, onSolve, loading,
                   undo
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Total Derivative — independent variable selector */}
+        {operation === 'total_derivative' && (
+          <div className={styles.controlGroup}>
+            <span className={styles.controlLabel}>d/d</span>
+            <div className={styles.pillGroup} role="group" aria-label="Independent variable">
+              {['t', 'x', 'y', 'z'].map(v => (
+                <button
+                  key={v}
+                  className={`${styles.pill} ${totalWrt === v ? styles.pillActive : ''}`}
+                  onClick={() => setTotalWrt(v)}
+                  type="button"
+                  aria-pressed={totalWrt === v}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
           </div>
         )}

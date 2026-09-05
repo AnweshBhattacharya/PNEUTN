@@ -8,9 +8,14 @@ import React, { useMemo } from 'react'
 import katex from 'katex'
 import styles from './EquationPreview.module.css'
 
-function buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence) {
+function buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence, totalWrt) {
   if (!latexExpr) return null
   const inner = latexExpr
+
+  if (operation === 'total_derivative') {
+    const wrt = totalWrt || 't'
+    return `\\frac{d}{d${wrt}}\\left[${inner}\\right]`
+  }
 
   if (operation === 'derivative') {
     if (!wrtSequence || wrtSequence.length === 0) return `\\frac{d}{dx}\\left[${inner}\\right]`
@@ -64,9 +69,10 @@ export default function EquationPreview({
   operation,
   wrtSequence = ['x'],
   integrationSequence = [{ wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }],
+  totalWrt = 't',
 }) {
   const { html, error } = useMemo(() => {
-    const displayLatex = buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence)
+    const displayLatex = buildDisplayLatex(latexExpr, operation, wrtSequence, integrationSequence, totalWrt)
     if (!displayLatex) return { html: null, error: null }
 
     try {
@@ -96,10 +102,18 @@ export default function EquationPreview({
         return { html: null, error: 'Cannot render expression' }
       }
     }
-  }, [latexExpr, operation, wrtSequence, integrationSequence])
+  }, [latexExpr, operation, wrtSequence, integrationSequence, totalWrt])
 
   let opLabel = ''
-  if (operation === 'derivative') {
+  if (operation === 'total_derivative') {
+    opLabel = `d/d${totalWrt || 't'}`
+  } else if (operation === 'gradient') {
+    opLabel = '∇f'
+  } else if (operation === 'divergence') {
+    opLabel = '∇·F'
+  } else if (operation === 'curl') {
+    opLabel = '∇×F'
+  } else if (operation === 'derivative') {
     if (!wrtSequence || wrtSequence.length <= 1) {
       opLabel = `d/d${wrtSequence?.[0] || 'x'}`
     } else {
