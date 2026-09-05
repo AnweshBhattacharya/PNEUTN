@@ -26,7 +26,7 @@ function getExpressionValue(mathfield) {
 export default function EquationInput({ value, onChange, onSolve, loading,
   exampleOperation, exampleWrt, exampleBounds }) {
   const mlRef = useRef(null)
-  const [latexValue, setLatexValue]     = useState('')
+  const [latexValue, setLatexValue]     = useState(value || '')
   const [suggestions, setSuggestions]   = useState([])
   const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [balanceError, setBalanceError] = useState(null)
@@ -58,9 +58,17 @@ export default function EquationInput({ value, onChange, onSolve, loading,
 
   // Sync MathLive if parent changes value programmatically
   useEffect(() => {
-    if (mlRef.current && mlRef.current.value !== value) {
-      mlRef.current.value = value || ''
-      try { setLatexValue(mlRef.current.getValue('latex') || value || '') } catch { setLatexValue(value || '') }
+    if (mlRef.current) {
+      if (mlRef.current.value !== value) {
+        mlRef.current.value = value || ''
+      }
+      try {
+        setLatexValue(mlRef.current.getValue('latex') || value || '')
+      } catch {
+        setLatexValue(value || '')
+      }
+    } else {
+      setLatexValue(value || '')
     }
   }, [value])
 

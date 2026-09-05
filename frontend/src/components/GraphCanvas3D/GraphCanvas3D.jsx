@@ -147,6 +147,11 @@ export default function GraphCanvas3D({
 
   const segments = Math.max(8, Math.min(60, n || 40))
 
+  const exprStrRef   = useRef(exprStr)
+  const extraVarsRef = useRef(extraVars)
+  useEffect(() => { exprStrRef.current = exprStr }, [exprStr])
+  useEffect(() => { extraVarsRef.current = extraVars }, [extraVars])
+
   useEffect(() => {
     autoRotateRef.current = autoRotate
   }, [autoRotate])
@@ -354,7 +359,11 @@ export default function GraphCanvas3D({
       el.style.cursor = 'grabbing'
       pauseAutoRotate()
     })
-    window.addEventListener('mouseup', () => { isDragging.current = false; el.style.cursor = 'grab' })
+    const onWindowMouseUp = () => {
+      isDragging.current = false
+      if (el) el.style.cursor = 'grab'
+    }
+    window.addEventListener('mouseup', onWindowMouseUp)
     el.addEventListener('mousemove', e => {
       if (isDragging.current) {
         orbit(e.clientX - lastPtr.current.x, e.clientY - lastPtr.current.y)
@@ -375,12 +384,13 @@ export default function GraphCanvas3D({
         const yVal = p.z
         const zVal = p.y
 
-        const comp = compileExpr(exprStr)
+        const comp = compileExpr(exprStrRef.current)
         const h = 0.005
-        const z_xp = evalAt(comp, { x: xVal + h, y: yVal, ...extraVars }) ?? zVal
-        const z_xm = evalAt(comp, { x: xVal - h, y: yVal, ...extraVars }) ?? zVal
-        const z_yp = evalAt(comp, { x: xVal, y: yVal + h, ...extraVars }) ?? zVal
-        const z_ym = evalAt(comp, { x: xVal, y: yVal - h, ...extraVars }) ?? zVal
+        const currentVars = extraVarsRef.current
+        const z_xp = evalAt(comp, { x: xVal + h, y: yVal, ...currentVars }) ?? zVal
+        const z_xm = evalAt(comp, { x: xVal - h, y: yVal, ...currentVars }) ?? zVal
+        const z_yp = evalAt(comp, { x: xVal, y: yVal + h, ...currentVars }) ?? zVal
+        const z_ym = evalAt(comp, { x: xVal, y: yVal - h, ...currentVars }) ?? zVal
         const fx = (z_xp - z_xm) / (2 * h)
         const fy = (z_yp - z_ym) / (2 * h)
 
@@ -504,13 +514,15 @@ export default function GraphCanvas3D({
     ro.observe(mount)
 
     return () => {
+      window.removeEventListener('mouseup', onWindowMouseUp)
       cancelAnimationFrame(animRef.current)
       clearTimeout(interactTimer.current)
       ro.disconnect()
       renderer.dispose()
+      riemannBarPoolRef.current = []
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
     }
-  }, [segments, exprStr]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [segments]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Theme sync ──────────────────────────────────────────────────────────
   useEffect(() => {

@@ -46,8 +46,11 @@ function fmtTick(n) {
   return n.toFixed(2).replace(/\.?0+$/, '')
 }
 function computeNiceStep(range) {
+  if (!isFinite(range) || range <= 0) return 1
   const raw = range / 8
+  if (!isFinite(raw) || raw <= 0) return 1
   const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+  if (!isFinite(mag) || mag <= 0) return 1
   const frac = raw / mag
   if (frac < 1.5) return mag
   if (frac < 3.5) return 2 * mag
@@ -59,6 +62,7 @@ function computeNiceStep(range) {
 function TickLabels({ viewBounds, canvasW, canvasH, hoverInfo }) {
   if (!viewBounds) return null
   const [xL, xR, yB, yT] = viewBounds
+  if (!isFinite(xL) || !isFinite(xR) || !isFinite(yB) || !isFinite(yT) || xR <= xL || yT <= yB) return null
 
   const xStep = computeNiceStep(xR - xL)
   const yStep = computeNiceStep(yT - yB)
@@ -518,10 +522,11 @@ export default function GraphCanvas2D({
       lastPointer.current = { x: e.clientX, y: e.clientY }
       el.style.cursor = 'grabbing'
     })
-    window.addEventListener('mouseup', () => {
+    const onWindowMouseUp = () => {
       isDragging.current = false
-      el.style.cursor = 'crosshair'
-    })
+      if (el) el.style.cursor = 'crosshair'
+    }
+    window.addEventListener('mouseup', onWindowMouseUp)
 
     el.addEventListener('mousemove', e => {
       if (isDragging.current) {
@@ -684,6 +689,7 @@ export default function GraphCanvas2D({
     setViewBounds(getViewBounds()); setCanvasSize({ w: W, h: H })
 
     return () => {
+      window.removeEventListener('mouseup', onWindowMouseUp)
       cancelAnimationFrame(animRef.current); ro.disconnect(); renderer.dispose()
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
     }

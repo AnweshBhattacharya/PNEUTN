@@ -734,6 +734,8 @@ def handle(body: dict) -> dict:
             
             integration_sequence = []
             for item in integration_sequence_raw:
+                if not isinstance(item, dict):
+                    return _error("malformed_request", "Each item in 'integration_sequence' must be an object.", 400)
                 v = item.get("wrt", "x")
                 if v not in {"x", "y", "z", "t"}:
                     return _error("invalid_expression", f"Variable '{v}' not allowed.")

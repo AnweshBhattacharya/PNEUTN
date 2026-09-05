@@ -401,6 +401,14 @@ class TestSolveIntegral:
         rules = [s["rule"] for s in body["steps"]]
         assert "evaluate_bounds" in rules
 
+    def test_integration_sequence_non_dict_rejected(self):
+        status, body = self._solve({
+            "expr": "x^2", "operation": "integral",
+            "integration_sequence": ["invalid_item"]
+        })
+        assert status == 400, body
+        assert body["error"] == "malformed_request"
+
 
 # ── /riemann ─────────────────────────────────────────────────────────────
 

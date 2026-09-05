@@ -107,8 +107,10 @@ def handle(body: dict) -> dict:
         # Build region vertices for frontend shading (sample the two curves)
         with calculation_timeout(12):
             n_pts = 30
-            import numpy as np
-            xs_range = np.linspace(float(x_lo.evalf()), float(x_hi.evalf()), n_pts)
+            x0_f = float(x_lo.evalf())
+            x1_f = float(x_hi.evalf())
+            step = (x1_f - x0_f) / (n_pts - 1) if n_pts > 1 else 0
+            xs_range = [x0_f + i * step for i in range(n_pts)]
 
             upper_pts = []
             lower_pts = []
