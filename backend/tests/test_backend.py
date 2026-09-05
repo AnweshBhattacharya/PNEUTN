@@ -425,7 +425,7 @@ class TestRiemann:
 
     def test_exact_value_correct(self):
         status, body = self._riemann({
-            "expr": "x^2", "bounds": [0, 3], "sub_intervals": 1000
+            "expr": "x^2", "bounds": [0, 3], "sub_intervals": 200
         })
         assert status == 200, body
         # ∫₀³ x² dx = 9, Riemann with 1000 intervals should be close

@@ -5,29 +5,9 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import 'mathlive'
 import { getSuggestions, lastToken, validateExpr, checkBalance } from '../../lib/smartSyntax'
-import { normaliseMathExpression } from '../../lib/mathInput'
+import { normaliseMathExpression, extractVariables } from '../../lib/mathInput'
 import EquationPreview from '../EquationPreview/EquationPreview'
 import styles from './EquationInput.module.css'
-
-export function extractVariables(exprStr) {
-  if (!exprStr || typeof exprStr !== 'string') return ['x']
-  const reserved = new Set([
-    'e', 'pi', 'i',
-    'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
-    'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
-    'asinh', 'acosh', 'atanh',
-    'exp', 'log', 'ln', 'sqrt', 'abs', 'sign', 'd', 'dx', 'dy', 'dz', 'dt'
-  ])
-  const matches = exprStr.match(/[a-zA-Z]+/g) || []
-  const vars = []
-  for (const m of matches) {
-    const lower = m.toLowerCase()
-    if (m.length === 1 && !reserved.has(lower) && !vars.includes(lower)) {
-      vars.push(lower)
-    }
-  }
-  return vars.length > 0 ? vars : ['x']
-}
 
 /**
  * MathLive's `value` is LaTeX-oriented. The API and graph evaluator instead
@@ -56,7 +36,6 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     { wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }
   ])
   const [totalWrt, setTotalWrt]         = useState('t')  // independent var for df/dt
-  const boundsToggleId = 'bounds-toggle'
 
   const wrtOptions = useMemo(() => {
     const raw = value || latexValue || ''

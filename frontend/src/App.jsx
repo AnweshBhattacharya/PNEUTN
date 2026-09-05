@@ -22,7 +22,7 @@
  *   M2  — Mobile resize uses dual setTimeout (150ms + 400ms) for reliability
  *   F11 — Theme read from useTheme() state, not from DOM inline
  */
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
@@ -97,7 +97,7 @@ export default function App() {
   const [graphMode, setGraphMode]   = useState('2d')
   const [riemannRects, setRiemannRects] = useState([])
   // U1: surface Riemann results to parent
-  const [riemannSumResult, setRiemannSumResult] = useState(null)
+  const [_riemannSumResult, setRiemannSumResult] = useState(null)
   const [showArea, setShowArea]     = useState(false)
   // V3: area numeric value
   const [areaValue, setAreaValue]   = useState(null)

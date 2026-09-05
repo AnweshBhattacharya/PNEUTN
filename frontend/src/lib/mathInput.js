@@ -22,3 +22,23 @@ export function normaliseMathExpression(value) {
 
   return expression.trim()
 }
+
+export function extractVariables(exprStr) {
+  if (!exprStr || typeof exprStr !== 'string') return ['x']
+  const reserved = new Set([
+    'e', 'pi', 'i',
+    'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
+    'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
+    'asinh', 'acosh', 'atanh',
+    'exp', 'log', 'ln', 'sqrt', 'abs', 'sign', 'd', 'dx', 'dy', 'dz', 'dt'
+  ])
+  const matches = exprStr.match(/[a-zA-Z]+/g) || []
+  const vars = []
+  for (const m of matches) {
+    const lower = m.toLowerCase()
+    if (m.length === 1 && !reserved.has(lower) && !vars.includes(lower)) {
+      vars.push(lower)
+    }
+  }
+  return vars.length > 0 ? vars : ['x']
+}

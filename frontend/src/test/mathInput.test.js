@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normaliseMathExpression } from '../lib/mathInput'
-import { extractVariables } from '../components/EquationInput/EquationInput'
+import { normaliseMathExpression, extractVariables } from '../lib/mathInput'
 
 describe('normaliseMathExpression', () => {
   it('rejoins MathLive-spaced function names', () => {
