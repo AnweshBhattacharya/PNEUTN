@@ -1,4 +1,4 @@
-# Pneutn - AI Powered Calculus Visualiser
+# PNEUTN - AI Powered Calculus Visualiser
 
 ## 1. Overview and Live Demo
 Pneutn is a robust, serverless backend designed to perform advanced mathematical computations, including equation solving, Riemann sum approximations, and integral-order calculations. By combining cloud-native AWS services with the Google Gemini 2.5 Flash API, the system not only calculates precise mathematical results but also provides intelligent, dynamic narrations of the problem-solving steps. 
