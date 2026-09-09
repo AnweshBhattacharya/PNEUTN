@@ -1,27 +1,3 @@
-/**
- * App.jsx — Pneutn main layout.
- *
- * Layout (desktop):
- *   TOP ROW  — 50/50 split, fixed height ~52vh
- *     Left  : Input builder (MathLive field + controls + equation tabs)
- *     Right : Solution (result + step cards with KaTeX + explanations)
- *   BOTTOM ROW — flex 1, fills remaining viewport
- *     Sidebar : Curve list, area toggle, Riemann controls, region toggle
- *     Graph   : Full-width 2D/3D canvas + graph tabs
- *
- * On mobile: tabs switch between Input / Graph / Steps views.
- *
- * Bug fixes applied (see bugfix.md):
- *   B0  — Removed duplicate import block and broken JSX fragment
- *   B1  — RiemannControls now receives dynamic riemannBoundsLo/Hi state
- *   B9  — riemannRects + riemannSumResult cleared on activeId change
- *   U1  — onSumResult wired to setRiemannSumResult
- *   U3  — 3D sidebar controls (domain limits, mark point) fully restored
- *   U6  — onRegionData wired to setRegionVertices
- *   V3  — areaValue + onAreaValue wired to GraphCanvas2D
- *   M2  — Mobile resize uses dual setTimeout (150ms + 400ms) for reliability
- *   F11 — Theme read from useTheme() state, not from DOM inline
- */
 import React, { useState, useCallback, useEffect } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
@@ -36,18 +12,18 @@ import LoadingBar from './components/shared/LoadingBar'
 import { solve as callSolve, riemann as callRiemann } from './lib/apiClient'
 import styles from './App.module.css'
 
-const EQ_COLORS      = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
+const EQ_COLORS = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
 const EQ_COLORS_DARK = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
 
 const EXAMPLE_EXPRS = [
-  { label: 'x² sin x',   expr: 'x^2*sin(x)',   wrt: 'x', operation: 'derivative' },
-  { label: 'eˣ cos x',   expr: 'exp(x)*cos(x)', wrt: 'x', operation: 'derivative' },
-  { label: '∫ x² [0,3]', expr: 'x^2',           wrt: 'x', operation: 'integral', bounds: [0, 3] },
-  { label: 'x²y³ ∂/∂x',  expr: 'x^2*y^3',       wrt: 'x', operation: 'derivative' },
+  { label: 'x² sin x', expr: 'x^2*sin(x)', wrt: 'x', operation: 'derivative' },
+  { label: 'eˣ cos x', expr: 'exp(x)*cos(x)', wrt: 'x', operation: 'derivative' },
+  { label: '∫ x² [0,3]', expr: 'x^2', wrt: 'x', operation: 'integral', bounds: [0, 3] },
+  { label: 'x²y³ ∂/∂x', expr: 'x^2*y^3', wrt: 'x', operation: 'derivative' },
 ]
 
 let _nextId = 1
-function makeEq(expr = 'x^2') {
+function makeEq(expr = '') {
   return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [] }
 }
 
@@ -55,11 +31,11 @@ function SunIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="5"/>
-      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
     </svg>
   )
 }
@@ -67,7 +43,7 @@ function MoonIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
   )
 }
@@ -91,16 +67,20 @@ function useTheme() {
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const [savedEquations, setSavedEquations] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('pneutn-saved') || '[]') } catch { return [] }
+  })
 
-  const [equations, setEquations]   = useState([makeEq('x^2')])
-  const [activeId, setActiveId]     = useState(equations[0].id)
-  const [graphMode, setGraphMode]   = useState('2d')
+  const [equations, setEquations] = useState([makeEq('')])
+  const [activeId, setActiveId] = useState(equations[0].id)
+  const [graphMode, setGraphMode] = useState('2d')
   const [riemannRects, setRiemannRects] = useState([])
   // U1: surface Riemann results to parent
   const [_riemannSumResult, setRiemannSumResult] = useState(null)
-  const [showArea, setShowArea]     = useState(false)
+  const [showArea, setShowArea] = useState(false)
   // V3: area numeric value
-  const [areaValue, setAreaValue]   = useState(null)
+  const [areaValue, setAreaValue] = useState(null)
   const [regionVertices, setRegionVertices] = useState(null)
   const [activeExamplePatch, setActiveExamplePatch] = useState(null)
   const [mobilePanel, setMobilePanel] = useState('input')
@@ -122,41 +102,41 @@ export default function App() {
   const [riemannBoundsHi, setRiemannBoundsHi] = useState('4')
 
   // 2D graph parameter controls
-  const [showTangent,    setShowTangent]    = useState(true)
+  const [showTangent, setShowTangent] = useState(true)
   const [showDerivative, setShowDerivative] = useState(false)
-  const [showGrid,       setShowGrid]       = useState(true)
-  const [showVolumeRev,  setShowVolumeRev]  = useState(false)
-  const [markedX,        setMarkedX]        = useState(null)
-  const [markedXInput,   setMarkedXInput]   = useState('')
-  const [xRangeMin,      setXRangeMin]      = useState(null)
-  const [xRangeMax,      setXRangeMax]      = useState(null)
+  const [showGrid, setShowGrid] = useState(true)
+  const [showVolumeRev, setShowVolumeRev] = useState(false)
+  const [markedX, setMarkedX] = useState(null)
+  const [markedXInput, setMarkedXInput] = useState('')
+  const [xRangeMin, setXRangeMin] = useState(null)
+  const [xRangeMax, setXRangeMax] = useState(null)
   const [xRangeMinInput, setXRangeMinInput] = useState('-6')
   const [xRangeMaxInput, setXRangeMaxInput] = useState('6')
 
   // 3D graph parameter & limit controls (U3: fully restored)
-  const [xMin3D,         setXMin3D]         = useState(-4)
-  const [xMax3D,         setXMax3D]         = useState(4)
-  const [yMin3D,         setYMin3D]         = useState(-4)
-  const [yMax3D,         setYMax3D]         = useState(4)
-  const [zMin3D,         setZMin3D]         = useState(null)
-  const [zMax3D,         setZMax3D]         = useState(null)
-  const [xMin3DInput,    setXMin3DInput]    = useState('-4')
-  const [xMax3DInput,    setXMax3DInput]    = useState('4')
-  const [yMin3DInput,    setYMin3DInput]    = useState('-4')
-  const [yMax3DInput,    setYMax3DInput]    = useState('4')
-  const [zMin3DInput,    setZMin3DInput]    = useState('')
-  const [zMax3DInput,    setZMax3DInput]    = useState('')
-  const [showVolume3D,   setShowVolume3D]   = useState(true)
-  const [showGrid3D,     setShowGrid3D]     = useState(true)
-  const [showWireframe3D,setShowWireframe3D]= useState(true)
-  const [showTangent3D,  setShowTangent3D]  = useState(true)
-  const [showDerivative3D,setShowDerivative3D]= useState(false)
-  const [markedX3D,      setMarkedX3D]      = useState(null)
-  const [markedY3D,      setMarkedY3D]      = useState(null)
+  const [xMin3D, setXMin3D] = useState(-4)
+  const [xMax3D, setXMax3D] = useState(4)
+  const [yMin3D, setYMin3D] = useState(-4)
+  const [yMax3D, setYMax3D] = useState(4)
+  const [zMin3D, setZMin3D] = useState(null)
+  const [zMax3D, setZMax3D] = useState(null)
+  const [xMin3DInput, setXMin3DInput] = useState('-4')
+  const [xMax3DInput, setXMax3DInput] = useState('4')
+  const [yMin3DInput, setYMin3DInput] = useState('-4')
+  const [yMax3DInput, setYMax3DInput] = useState('4')
+  const [zMin3DInput, setZMin3DInput] = useState('')
+  const [zMax3DInput, setZMax3DInput] = useState('')
+  const [showVolume3D, setShowVolume3D] = useState(true)
+  const [showGrid3D, setShowGrid3D] = useState(true)
+  const [showWireframe3D, setShowWireframe3D] = useState(true)
+  const [showTangent3D, setShowTangent3D] = useState(true)
+  const [showDerivative3D, setShowDerivative3D] = useState(false)
+  const [markedX3D, setMarkedX3D] = useState(null)
+  const [markedY3D, setMarkedY3D] = useState(null)
   const [markedX3DInput, setMarkedX3DInput] = useState('')
   const [markedY3DInput, setMarkedY3DInput] = useState('')
-  const [n3D,            setN3D]            = useState(30)
-  const [samplePoint3D,  setSamplePoint3D]  = useState('midpoint')
+  const [n3D, setN3D] = useState(30)
+  const [samplePoint3D, setSamplePoint3D] = useState('midpoint')
 
   const activeEq = equations.find(e => e.id === activeId) ?? equations[0]
   const activeCurveIndex = equations.findIndex(e => e.id === activeId)
@@ -255,13 +235,14 @@ export default function App() {
     }
   }, [activeEq.expr, riemannBoundsLo, riemannBoundsHi])
 
-  const loadExample = (example) => {    updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
+  const loadExample = (example) => {
+    updateEquation(activeId, { expr: example.expr, result: null, error: null, steps: [] })
     setRiemannRects([])
     setRiemannSumResult(null)
     setActiveExamplePatch({
       operation: example.operation ?? null,
-      wrt:       example.wrt       ?? null,
-      bounds:    example.bounds    ?? null,
+      wrt: example.wrt ?? null,
+      bounds: example.bounds ?? null,
     })
   }
 
@@ -282,16 +263,97 @@ export default function App() {
 
       {/* ── Top bar ── */}
       <header className={styles.topBar}>
+        {/* Left slot: hamburger menu */}
+        <div className={styles.topBarLeft}>
+          <div className={styles.menuWrap}>
+            <button
+              className={styles.hamburgerBtn}
+              onClick={() => setMenuOpen(o => !o)}
+              aria-label="Examples menu"
+              aria-expanded={menuOpen}
+              aria-controls="examples-menu"
+            >
+              <span className={styles.hamburgerLine} />
+              <span className={styles.hamburgerLine} />
+              <span className={styles.hamburgerLine} />
+            </button>
+            {menuOpen && (
+              <>
+                {/* Click-away overlay */}
+                <div className={styles.menuOverlay} onClick={() => setMenuOpen(false)} />
+                <nav
+                  id="examples-menu"
+                  className={styles.examplesDropdown}
+                  aria-label="Examples"
+                >
+                  <span className={styles.menuHeading}>Examples</span>
+                  {EXAMPLE_EXPRS.map((ex, i) => (
+                    <button
+                      key={i}
+                      className={styles.exampleChip}
+                      onClick={() => { loadExample(ex); setMenuOpen(false) }}
+                    >
+                      {ex.label}
+                    </button>
+                  ))}
+                  {/* ── Save current equation ── */}
+                  <span className={styles.menuHeading} style={{ marginTop: 4 }}>Saved</span>
+                  {activeEq.expr?.trim() && (
+                    <button
+                      className={styles.exampleChip}
+                      style={{ color: 'var(--accent)', borderTop: '1px solid var(--border-color)' }}
+                      onClick={() => {
+                        const expr = activeEq.expr.trim()
+                        if (!expr) return
+                        const next = savedEquations.some(s => s.expr === expr)
+                          ? savedEquations
+                          : [...savedEquations, { expr, label: expr.length > 16 ? expr.slice(0, 16) + '…' : expr }].slice(-10)
+                        setSavedEquations(next)
+                        try { localStorage.setItem('pneutn-saved', JSON.stringify(next)) } catch { }
+                      }}
+                    >
+                      + Save "{activeEq.expr.length > 16 ? activeEq.expr.slice(0, 16) + '…' : activeEq.expr}"
+                    </button>
+                  )}
+                  {savedEquations.length === 0 && (
+                    <span className={styles.menuHeading} style={{ fontStyle: 'italic', opacity: 0.5, padding: '6px 10px', display: 'block' }}>
+                      No saved equations
+                    </span>
+                  )}
+                  {savedEquations.map((s, i) => (
+                    <div key={i} className={styles.savedRow}>
+                      <button
+                        className={styles.exampleChip}
+                        style={{ flex: 1, borderBottom: 'none' }}
+                        onClick={() => {
+                          updateExpr(activeId, s.expr)
+                          setMenuOpen(false)
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                      <button
+                        className={styles.savedDelete}
+                        onClick={() => {
+                          const next = savedEquations.filter((_, j) => j !== i)
+                          setSavedEquations(next)
+                          try { localStorage.setItem('pneutn-saved', JSON.stringify(next)) } catch { }
+                        }}
+                        title="Remove"
+                        aria-label={`Remove saved equation ${s.label}`}
+                      >×</button>
+                    </div>
+                  ))}
+                </nav>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Center: brand */}
         <span className={styles.brand}>PNEUTN</span>
 
-        <nav className={styles.topBarCenter} aria-label="Examples">
-          {EXAMPLE_EXPRS.map((ex, i) => (
-            <button key={i} className={styles.exampleChip} onClick={() => loadExample(ex)}>
-              {ex.label}
-            </button>
-          ))}
-        </nav>
-
+        {/* Right slot: theme toggle */}
         <div className={styles.topBarRight}>
           <button className={styles.themeBtn} onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -331,36 +393,7 @@ export default function App() {
           {/* ── Input column ── */}
           <div className={`${styles.inputCol} ${mobilePanel !== 'input' ? styles.mobileHidden : ''}`}>
 
-            {/* Equation tabs */}
-            <div className={styles.eqTabs}>
-              {equations.map((eq, i) => {
-                const color = colors[i % colors.length]
-                return (
-                  <button key={eq.id}
-                    className={`${styles.eqTab} ${eq.id === activeId ? styles.eqTabActive : ''}`}
-                    onClick={() => setActiveId(eq.id)}
-                    style={eq.id === activeId ? { borderTopColor: color } : {}}>
-                    <span className={styles.eqDot} style={{ background: color }} />
-                    <span className={styles.eqTabLabel}>
-                      {eq.expr
-                        ? (eq.expr.length > 12 ? eq.expr.slice(0, 12) + '…' : eq.expr)
-                        : `f${i + 1}(x)`}
-                    </span>
-                    {equations.length > 1 && (
-                      <button className={styles.eqTabClose}
-                        onClick={e => { e.stopPropagation(); removeEquation(eq.id) }}
-                        aria-label="Remove equation">×</button>
-                    )}
-                  </button>
-                )
-              })}
-              {equations.length < 6 && (
-                <button className={styles.addEqBtn} onClick={addEquation}
-                  aria-label="Add equation" title="Add equation">+</button>
-              )}
-            </div>
-
-            {/* Input builder */}
+            {/* Input builder — catTabs are inside EquationInput, above eqTabs visually */}
             <div className={styles.inputColBody}>
               <EquationInput
                 key={activeEq.id}
@@ -371,6 +404,13 @@ export default function App() {
                 exampleOperation={activeExamplePatch?.operation}
                 exampleWrt={activeExamplePatch?.wrt}
                 exampleBounds={activeExamplePatch?.bounds}
+                onViewGraph={() => setMobilePanel('graph')}
+                equations={equations}
+                activeId={activeId}
+                onSetActiveId={setActiveId}
+                onAddEquation={addEquation}
+                onRemoveEquation={removeEquation}
+                colors={colors}
               />
             </div>
           </div>
@@ -391,7 +431,7 @@ export default function App() {
         </div>
 
         {/* ══ BOTTOM ROW: Graph ══ */}
-        <div className={`${styles.bottomRow} ${mobilePanel === 'input' || mobilePanel === 'steps' ? styles.mobileHidden : ''}`}>
+        <div id="graph-section" className={`${styles.bottomRow} ${mobilePanel === 'input' || mobilePanel === 'steps' ? styles.mobileHidden : ''}`}>
 
           {/* Graph mode tabs (full-width strip) */}
           <div className={styles.bottomRowHeader}>
@@ -446,86 +486,66 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Graph Controls (2D) */}
+                {/* Graph Controls moved to ⚙ dropdown on the graph toolbar */}
+
+                {/* X-range inputs — always visible */}
                 <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>Graph Controls</span>
-
-                  {[
-                    { label: 'Area shading', value: showArea, set: setShowArea },
-                    { label: 'Tangent line', value: showTangent, set: setShowTangent },
-                    { label: 'Derivative f′(x)', value: showDerivative, set: setShowDerivative },
-                    { label: 'Grid', value: showGrid, set: setShowGrid },
-                    { label: 'Volume of Revolution', value: showVolumeRev, set: setShowVolumeRev },
-                  ].map(({ label, value, set }) => (
-                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
-                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
-                      <span className={styles.toggle}>
-                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
-                        <span className={styles.toggleTrack} />
-                        <span className={styles.toggleThumb} />
-                      </span>
-                    </label>
-                  ))}
-
-                  {/* X-range inputs */}
-                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span className={styles.areaLabel}>X range</span>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <input
-                        type="number"
-                        className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
-                        value={xRangeMinInput}
-                        onChange={e => {
-                          setXRangeMinInput(e.target.value)
-                          const v = parseFloat(e.target.value)
-                          setXRangeMin(isFinite(v) ? v : null)
-                        }}
-                        placeholder="−6"
-                        aria-label="X minimum"
-                      />
-                      <span className={styles.areaLabel}>to</span>
-                      <input
-                        type="number"
-                        className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
-                        value={xRangeMaxInput}
-                        onChange={e => {
-                          setXRangeMaxInput(e.target.value)
-                          const v = parseFloat(e.target.value)
-                          setXRangeMax(isFinite(v) ? v : null)
-                        }}
-                        placeholder="6"
-                        aria-label="X maximum"
-                      />
-                    </div>
+                  <span className={styles.sidebarSectionLabel}>X range</span>
+                  <div style={{ padding: '4px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      className={styles.curveExprInput}
+                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
+                      value={xRangeMinInput}
+                      onChange={e => {
+                        setXRangeMinInput(e.target.value)
+                        const v = parseFloat(e.target.value)
+                        setXRangeMin(isFinite(v) ? v : null)
+                      }}
+                      placeholder="−6"
+                      aria-label="X minimum"
+                    />
+                    <span className={styles.areaLabel}>to</span>
+                    <input
+                      type="number"
+                      className={styles.curveExprInput}
+                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
+                      value={xRangeMaxInput}
+                      onChange={e => {
+                        setXRangeMaxInput(e.target.value)
+                        const v = parseFloat(e.target.value)
+                        setXRangeMax(isFinite(v) ? v : null)
+                      }}
+                      placeholder="6"
+                      aria-label="X maximum"
+                    />
                   </div>
+                </div>
 
-                  {/* Mark point x = a */}
-                  <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span className={styles.areaLabel}>Mark x =</span>
-                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                      <input
-                        type="number"
-                        className={styles.curveExprInput}
-                        style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 70 }}
-                        value={markedXInput}
-                        onChange={e => {
-                          setMarkedXInput(e.target.value)
-                          const v = parseFloat(e.target.value)
-                          setMarkedX(isFinite(v) ? v : null)
-                        }}
-                        placeholder="e.g. 2"
-                        aria-label="Mark x value"
-                      />
-                      {markedX != null && (
-                        <button
-                          className={styles.curveRemoveBtn}
-                          onClick={() => { setMarkedX(null); setMarkedXInput('') }}
-                          title="Clear mark"
-                        >×</button>
-                      )}
-                    </div>
+                {/* Mark point x = a */}
+                <div className={styles.curveListSection}>
+                  <span className={styles.sidebarSectionLabel}>Mark x =</span>
+                  <div style={{ padding: '4px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      className={styles.curveExprInput}
+                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 70 }}
+                      value={markedXInput}
+                      onChange={e => {
+                        setMarkedXInput(e.target.value)
+                        const v = parseFloat(e.target.value)
+                        setMarkedX(isFinite(v) ? v : null)
+                      }}
+                      placeholder="e.g. 2"
+                      aria-label="Mark x value"
+                    />
+                    {markedX != null && (
+                      <button
+                        className={styles.curveRemoveBtn}
+                        onClick={() => { setMarkedX(null); setMarkedXInput('') }}
+                        title="Clear mark"
+                      >×</button>
+                    )}
                   </div>
                 </div>
 
@@ -596,19 +616,21 @@ export default function App() {
                 <div className={styles.curveListSection}>
                   <span className={styles.sidebarSectionLabel}>Graph Controls</span>
                   {[
-                    { label: 'Tangent plane', value: showTangent3D, set: setShowTangent3D },
-                    { label: 'Derivative slices', value: showDerivative3D, set: setShowDerivative3D },
-                    { label: '3D Grid', value: showGrid3D, set: setShowGrid3D },
-                    { label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
-                    { label: 'Volume under surface', value: showVolume3D, set: setShowVolume3D },
-                  ].map(({ label, value, set }) => (
-                    <label key={label} className={styles.areaToggleRow} style={{ cursor: 'pointer', gap: 8, display: 'flex', alignItems: 'center', padding: '4px 4px' }}>
-                      <span className={styles.areaLabel} style={{ flex: 1 }}>{label}</span>
-                      <span className={styles.toggle}>
-                        <input type="checkbox" checked={value} onChange={e => set(e.target.checked)} />
-                        <span className={styles.toggleTrack} />
-                        <span className={styles.toggleThumb} />
-                      </span>
+                    { id: '3d-tan', label: 'Tangent plane', value: showTangent3D, set: setShowTangent3D },
+                    { id: '3d-deriv', label: 'Derivative slices', value: showDerivative3D, set: setShowDerivative3D },
+                    { id: '3d-grid', label: '3D Grid', value: showGrid3D, set: setShowGrid3D },
+                    { id: '3d-wire', label: 'Surface Wireframe', value: showWireframe3D, set: setShowWireframe3D },
+                    { id: '3d-vol', label: 'Volume under surface', value: showVolume3D, set: setShowVolume3D },
+                  ].map(({ id, label, value, set }) => (
+                    <label key={id} className={styles.checkRow}>
+                      <input
+                        id={id}
+                        type="checkbox"
+                        className={styles.nativeCheck}
+                        checked={value}
+                        onChange={e => set(e.target.checked)}
+                      />
+                      <span className={styles.areaLabel}>{label}</span>
                     </label>
                   ))}
                 </div>
@@ -763,7 +785,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* V8: Renamed from "Riemann Grid Resolution" to "Surface Resolution" */}
+                {/* Surface Resolution */}
                 <div className={styles.curveListSection}>
                   <span className={styles.sidebarSectionLabel}>Surface Resolution (n)</span>
                   <div style={{ padding: '4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -777,26 +799,16 @@ export default function App() {
                       step="2"
                       value={n3D}
                       onChange={e => setN3D(parseInt(e.target.value, 10))}
-                      style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer' }}
+                      className={styles.themeSlider}
                       aria-label="3D surface segments n"
                     />
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div className={styles.pillGroup}>
                       {['left', 'midpoint', 'right'].map(s => (
                         <button
                           key={s}
                           type="button"
                           onClick={() => setSamplePoint3D(s)}
-                          className={styles.numericPill}
-                          style={{
-                            flex: 1,
-                            padding: '3px 4px',
-                            textAlign: 'center',
-                            cursor: 'pointer',
-                            background: samplePoint3D === s ? 'var(--accent)' : 'var(--surface-sunken)',
-                            color: samplePoint3D === s ? '#fff' : 'var(--content-secondary)',
-                            fontWeight: samplePoint3D === s ? 700 : 400,
-                            border: '1px solid var(--border-color)',
-                          }}
+                          className={`${styles.pill} ${samplePoint3D === s ? styles.pillActive : ''}`}
                         >
                           {s}
                         </button>
@@ -808,8 +820,8 @@ export default function App() {
               </aside>
             )}
 
-            {/* ── SliderSidebar: viewport + free-param sliders (2D only) ── */}
-            {graphMode === '2d' && (
+            {/* ── SliderSidebar: free-param sliders only (no viewport — pinch/scroll handles that) ── */}
+            {graphMode === '2d' && Object.keys(paramValues).length > 0 && (
               <SliderSidebar
                 xRange={xRange}
                 yRange={yRange}
@@ -822,56 +834,53 @@ export default function App() {
 
             {/* ── Main graph canvas ── */}
             <div className={styles.graphMain} style={{ position: 'relative' }}>
-              {/* ParameterDisplay overlay — 2D only */}
-              {graphMode === '2d' && (
-                <ParameterDisplay
-                  xRange={xRange}
-                  yRange={yRange}
-                  paramValues={paramValues}
-                />
-              )}
               <div style={{ display: graphMode === '2d' ? 'contents' : 'none' }}>
                 <GraphCanvas2D
-                    equations={graphEquations}
-                    activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
-                    overlayRectangles={riemannRects}
-                    showArea={showArea}
-                    showVolumeRev={showVolumeRev}
-                    regionVertices={regionVertices}
-                    showTangent={showTangent}
-                    showDerivative={showDerivative}
-                    showGrid={showGrid}
-                    markedX={markedX}
-                    xRangeMin={xRangeMin}
-                    xRangeMax={xRangeMax}
-                    areaValue={areaValue}
-                    onAreaValue={setAreaValue}
-                    xRange={xRange}
-                    yRange={yRange}
-                    extraVars={paramValues}
-                  />
+                  equations={graphEquations}
+                  activeCurveIndex={activeCurveIndex >= 0 ? activeCurveIndex : 0}
+                  overlayRectangles={riemannRects}
+                  showArea={showArea}
+                  showVolumeRev={showVolumeRev}
+                  regionVertices={regionVertices}
+                  showTangent={showTangent}
+                  showDerivative={showDerivative}
+                  showGrid={showGrid}
+                  markedX={markedX}
+                  xRangeMin={xRangeMin}
+                  xRangeMax={xRangeMax}
+                  areaValue={areaValue}
+                  onAreaValue={setAreaValue}
+                  xRange={xRange}
+                  yRange={yRange}
+                  extraVars={paramValues}
+                  onShowAreaChange={setShowArea}
+                  onShowTangentChange={setShowTangent}
+                  onShowDerivativeChange={setShowDerivative}
+                  onShowGridChange={setShowGrid}
+                  onShowVolumeRevChange={setShowVolumeRev}
+                />
 
-                  {activeEq.numericSample?.length > 0 && (
-                    <section className={styles.samplePointPanel} aria-label="Verified sample points">
-                      <div className={styles.samplePointHeader}>
-                        <span>Sample points</span>
-                        <span>{activeEq.expr}</span>
-                      </div>
-                      <div className={styles.samplePointGrid}>
-                        {activeEq.numericSample.slice(0, 7).map((pt, i) => {
-                            const wrtKey = Object.keys(pt).find(k => k !== 'y') ?? 'x'
-                            return (
-                              <div key={i} className={styles.samplePointCard}>
-                                <span className={styles.samplePointLabel}>{wrtKey}</span>
-                                <span className={styles.samplePointValue}>{pt[wrtKey]}</span>
-                                <span className={styles.samplePointLabel}>y</span>
-                                <span className={styles.samplePointValue}>{pt.y}</span>
-                              </div>
-                            )
-                          })}
-                      </div>
-                    </section>
-                  )}
+                {activeEq.numericSample?.length > 0 && (
+                  <section className={styles.samplePointPanel} aria-label="Verified sample points">
+                    <div className={styles.samplePointHeader}>
+                      <span>Sample points</span>
+                      <span>{activeEq.expr}</span>
+                    </div>
+                    <div className={styles.samplePointGrid}>
+                      {activeEq.numericSample.slice(0, 7).map((pt, i) => {
+                        const wrtKey = Object.keys(pt).find(k => k !== 'y') ?? 'x'
+                        return (
+                          <div key={i} className={styles.samplePointCard}>
+                            <span className={styles.samplePointLabel}>{wrtKey}</span>
+                            <span className={styles.samplePointValue}>{pt[wrtKey]}</span>
+                            <span className={styles.samplePointLabel}>y</span>
+                            <span className={styles.samplePointValue}>{pt.y}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
               </div>
               <div style={{ display: graphMode === '3d' ? 'contents' : 'none' }}>
                 <GraphCanvas3D

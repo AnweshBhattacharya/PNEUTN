@@ -1,82 +1,80 @@
-/* EquationPreview.module.css — RawBlock minimalist design */
+/* EquationPreview.module.css — compact inline preview, same height as input */
 
 .wrapper {
   position: relative;
-  padding: var(--sp-3) var(--sp-4);
+  padding: 6px 10px 6px 48px;   /* left pad makes room for the label */
   background: var(--surface-sunken);
   border: 1px solid var(--border-color);
   border-radius: 0;
-  min-height: 56px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  justify-content: center;
   overflow: hidden;
   transition: border-color var(--duration-fast) var(--ease-out);
 }
 
 .wrapper.hasContent {
-  border-color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border-color));
 }
 
-/* Label in top-left corner */
+/* Label pinned left */
 .label {
   position: absolute;
-  top: 6px;
-  left: var(--sp-2);
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--content-tertiary);
   pointer-events: none;
+  white-space: nowrap;
 }
 
-/* Operation badge */
+/* Operation badge pinned right */
 .opBadge {
   position: absolute;
-  top: 6px;
-  right: var(--sp-2);
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.06em;
   color: var(--accent);
-  background: var(--accent-muted);
-  padding: 1px 6px;
-  border-radius: 0;
+  padding: 1px 5px;
   pointer-events: none;
+  border: 1px solid var(--accent);
+  white-space: nowrap;
 }
 
-/* KaTeX render area */
+/* KaTeX render — compact, centered, scrollable */
 .display {
-  font-size: 22px;
-  line-height: 1.4;
+  font-size: 15px;
+  line-height: 1.3;
   text-align: center;
   width: 100%;
   overflow-x: auto;
-  padding: 8px 0 0;
-  animation: previewFade 150ms var(--ease-out) both;
+  scrollbar-width: none;
+  animation: previewFade 120ms var(--ease-out) both;
+  padding-right: 52px; /* don't collide with opBadge */
 }
+.display::-webkit-scrollbar { display: none; }
 
 @keyframes previewFade {
-  from { opacity: 0.4; transform: scale(0.97); }
-  to   { opacity: 1;   transform: scale(1);    }
+  from { opacity: 0.3; }
+  to   { opacity: 1; }
 }
 
 .placeholder {
   font-family: var(--font-mono);
-  font-size: var(--text-small);
+  font-size: 10px;
   color: var(--content-tertiary);
-  text-align: center;
-  padding-top: 4px;
   font-style: italic;
 }
 
-/* Error state */
 .parseError {
   font-family: var(--font-mono);
   font-size: var(--text-tiny);
   color: var(--color-error);
-  text-align: center;
-  padding-top: 4px;
 }

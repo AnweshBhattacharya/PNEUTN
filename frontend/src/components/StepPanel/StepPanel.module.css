@@ -325,8 +325,8 @@
   border-radius: 0;
 }
 
-/* ── Explanation — prominently highlighted ── */
-.explanation {
+/* ── Explanation — minimal (used in substeps; override in stepExplanation context) ── */
+.explanationLegacy {
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 500;
@@ -338,7 +338,6 @@
   border-radius: 0;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface-raised));
   margin: 0;
-  animation: fadeIn var(--duration-base) var(--ease-out) both;
 }
 
 /* ── KaTeX ── */
@@ -451,4 +450,110 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* ── Compact step card (new layout) ─────────────────────────────── */
+.stepRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px var(--sp-3);
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  transition: background 200ms ease;
+}
+.step:hover .stepRow {
+  background: var(--surface-hover);
+}
+
+.stepEquals {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--content-tertiary);
+  flex-shrink: 0;
+}
+
+.stepResult {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  font-size: 0.95em;
+}
+.stepResult::-webkit-scrollbar { display: none; }
+
+/* Info button — subtle, fades in on step hover */
+.stepInfoBtn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  line-height: 1;
+  /* Hidden by default, visible when step is hovered or explanation is open */
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+.step:hover .stepInfoBtn,
+.stepInfoBtnActive {
+  opacity: 0.55;
+}
+.stepInfoBtn:hover,
+.stepInfoBtnActive:hover {
+  opacity: 1 !important;
+}
+
+/* ── Explanation panel — CSS-driven enter/exit ── */
+/*
+   Always rendered in the DOM. Toggled via .stepExplanationVisible class.
+   max-height trick gives a smooth height animation without JS measuring.
+   overflow: hidden is required for the max-height collapse to work.
+*/
+.stepExplanation {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  /* Single transition covers both height and opacity */
+  transition:
+    max-height 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity    260ms ease 40ms,
+    padding    320ms ease;
+  padding: 0 var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  /* No border/background until visible — avoids 1px line flash */
+  border-top: 1px solid transparent;
+}
+.stepExplanationVisible {
+  max-height: 200px;
+  opacity: 1;
+  padding: 7px var(--sp-3) 10px;
+  border-top-color: var(--border-color);
+}
+
+/* Explanation text — minimal, no heavy border */
+.explanation {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--content-secondary);
+  margin: 0;
+}
+
+.stepBeforeRow {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 0.88em;
+  color: var(--content-tertiary);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.stepBeforeRow::-webkit-scrollbar { display: none; }
+
+@keyframes revealExplanation {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

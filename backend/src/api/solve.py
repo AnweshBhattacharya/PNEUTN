@@ -70,6 +70,10 @@ _NARRATION = {
     "evaluate_bounds":      "Evaluate the antiderivative at the upper limit and subtract its value at the lower limit.",
     "simplify":             "Simplify the expression by combining like terms or applying algebraic identities.",
     "default":              "Apply the appropriate calculus transformation to this expression.",
+    # Vector calculus
+    "gradient_component":   "Partial derivative of the scalar field with respect to {wrt} — treating all other variables as constants.",
+    "divergence_sum":       "Divergence: sum the partial derivative of each component with respect to its own variable — ∂P/∂x + ∂Q/∂y + ∂R/∂z.",
+    "curl_component":       "Curl component: subtract the cross-partial derivatives — the signed difference of the two off-axis partials.",
 }
 
 def _narrate(rule: str, wrt: str = "x") -> str:
@@ -603,6 +607,187 @@ def _integral_steps(expr: sympy.Expr, integration_sequence: list[dict]) -> tuple
     return current, steps
 
 
+# ── Vector calculus handlers ────────────────────────────────────────────────
+
+_ALLOWED_GRAD_VARS = {"x", "y", "z"}
+
+
+def _vec_safe_parse(expr_str: str):
+    """Thin wrapper — parse and re-raise as a readable error."""
+    try:
+        return safe_parse(expr_str)
+    except ExpressionError as e:
+        raise ExpressionError(str(e))
+
+
+def _gradient_steps(expr_str: str, wrt_vars: list) -> dict:
+    """
+    Compute gradient of a scalar field f(x,y,z).
+    Returns {result_latex, components, steps}.
+    """
+    f = _vec_safe_parse(expr_str)
+    sym_vars = [symbols(v) for v in wrt_vars]
+
+    components = []
+    steps = []
+    col_rows = []
+
+    for v_str, v_sym in zip(wrt_vars, sym_vars):
+        before = f"\\frac{{\\partial f}}{{\\partial {v_str}}}"
+        result = diff(f, v_sym)
+        after  = latex(result)
+        col_rows.append(after)
+        components.append({"var": v_str, "latex": after})
+        steps.append({
+            "rule": "gradient_component",
+            "before_latex": before,
+            "after_latex": after,
+            "narration": _NARRATION["gradient_component"].replace("{wrt}", v_str),
+            "narrated_by": "template",
+        })
+
+    # Column vector LaTeX
+    rows_latex = " \\\\ ".join(col_rows)
+    result_latex = f"\\begin{{pmatrix}} {rows_latex} \\end{{pmatrix}}"
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "result_latex": result_latex,
+            "components": components,
+            "result_numeric_sample": [],
+            "narration": {},
+            "steps": steps,
+            "operation_type": "gradient",
+        }),
+    }
+
+
+def _validate_vector_components(raw: object) -> list | None:
+    """
+    Validate components: [{var: str, expr: str}, ...] — exactly 3, vars x/y/z.
+    Returns parsed list or None on error.
+    """
+    if not isinstance(raw, list) or len(raw) != 3:
+        return None
+    vars_seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        v = item.get("var", "")
+        e = item.get("expr", "")
+        if v not in _ALLOWED_GRAD_VARS or not isinstance(e, str) or not e.strip():
+            return None
+        vars_seen.add(v)
+    if vars_seen != {"x", "y", "z"}:
+        return None
+    return raw
+
+
+def _divergence_steps(components: list) -> dict:
+    """
+    Compute divergence of F = (P, Q, R): ∂P/∂x + ∂Q/∂y + ∂R/∂z.
+    """
+    x_sym, y_sym, z_sym = symbols("x y z")
+    sym_map = {"x": x_sym, "y": y_sym, "z": z_sym}
+
+    steps = []
+    term_latexes = []
+    total = sympy.Integer(0)
+
+    for item in components:
+        v_str = item["var"]
+        f = _vec_safe_parse(item["expr"])
+        v_sym = sym_map[v_str]
+        partial = diff(f, v_sym)
+        before = f"\\frac{{\\partial {v_str.upper()}}}{{\\partial {v_str}}}"
+        after  = latex(partial)
+        term_latexes.append(after)
+        total  = total + partial
+        steps.append({
+            "rule": "divergence_sum",
+            "before_latex": before,
+            "after_latex": after,
+            "narration": _NARRATION["divergence_sum"],
+            "narrated_by": "template",
+        })
+
+    result_latex = latex(sympy.simplify(total))
+    steps.append({
+        "rule": "simplify",
+        "before_latex": " + ".join(term_latexes),
+        "after_latex": result_latex,
+        "narration": _NARRATION["simplify"],
+        "narrated_by": "template",
+    })
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "result_latex": result_latex,
+            "components": [],
+            "result_numeric_sample": [],
+            "narration": {},
+            "steps": steps,
+            "operation_type": "divergence",
+        }),
+    }
+
+
+def _curl_steps(components: list) -> dict:
+    """
+    Compute curl of F = (P, Q, R):
+      i: ∂R/∂y - ∂Q/∂z
+      j: ∂P/∂z - ∂R/∂x
+      k: ∂Q/∂x - ∂P/∂y
+    """
+    x_sym, y_sym, z_sym = symbols("x y z")
+    sym_map = {"x": x_sym, "y": y_sym, "z": z_sym}
+
+    exprs = {item["var"]: _vec_safe_parse(item["expr"]) for item in components}
+    P, Q, R = exprs["x"], exprs["y"], exprs["z"]
+
+    curl_components = [
+        ("x", diff(R, y_sym) - diff(Q, z_sym), "\\partial R/\\partial y - \\partial Q/\\partial z"),
+        ("y", diff(P, z_sym) - diff(R, x_sym), "\\partial P/\\partial z - \\partial R/\\partial x"),
+        ("z", diff(Q, x_sym) - diff(P, y_sym), "\\partial Q/\\partial x - \\partial P/\\partial y"),
+    ]
+
+    steps = []
+    result_components = []
+    col_rows = []
+
+    for axis, val, before in curl_components:
+        after = latex(sympy.simplify(val))
+        col_rows.append(after)
+        result_components.append({"var": axis, "latex": after})
+        steps.append({
+            "rule": "curl_component",
+            "before_latex": before,
+            "after_latex": after,
+            "narration": _NARRATION["curl_component"],
+            "narrated_by": "template",
+        })
+
+    rows_latex = " \\\\ ".join(col_rows)
+    result_latex = f"\\begin{{pmatrix}} {rows_latex} \\end{{pmatrix}}"
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "result_latex": result_latex,
+            "components": result_components,
+            "result_numeric_sample": [],
+            "narration": {},
+            "steps": steps,
+            "operation_type": "curl",
+        }),
+    }
+
+
 # ── Numeric sampling ────────────────────────────────────────────────────────
 
 def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7,
@@ -658,8 +843,71 @@ def handle(body: dict) -> dict:
 
     if not expr_str:
         return _error("malformed_request", "Field 'expr' is required.", 400)
-    if operation not in ("derivative", "integral", "total_derivative"):
-        return _error("malformed_request", "'operation' must be 'derivative', 'integral', or 'total_derivative'.", 400)
+    VECTOR_OPS = ("gradient", "divergence", "curl")
+    if operation not in ("derivative", "integral", "total_derivative") + VECTOR_OPS:
+        return _error(
+            "malformed_request",
+            "'operation' must be 'derivative', 'integral', 'total_derivative', 'gradient', 'divergence', or 'curl'.",
+            400,
+        )
+
+    # ── Vector calculus dispatch (bypasses safe_parse of expr for div/curl) ─
+    if operation == "gradient":
+        wrt_vars_raw = body.get("wrt_vars", ["x", "y", "z"])
+        if not isinstance(wrt_vars_raw, list) or not all(
+            isinstance(v, str) and v in _ALLOWED_GRAD_VARS for v in wrt_vars_raw
+        ) or not wrt_vars_raw:
+            return _error("malformed_request", "'wrt_vars' must be a non-empty list of 'x', 'y', or 'z'.", 400)
+        try:
+            with calculation_timeout(12):
+                return _gradient_steps(expr_str, wrt_vars_raw)
+        except ExpressionError as e:
+            return _error("invalid_expression", str(e))
+        except ComputationTimeout:
+            return _error("computation_timeout", "Gradient computation timed out.", 504)
+        except Exception:
+            logger.exception("Gradient computation failure.")
+            return _error("internal_error", "Could not compute the gradient.", 500)
+
+    if operation == "divergence":
+        components_raw = body.get("components")
+        validated = _validate_vector_components(components_raw)
+        if validated is None:
+            return _error(
+                "malformed_request",
+                "'components' must be an array of exactly 3 objects {var: 'x'|'y'|'z', expr: string}.",
+                400,
+            )
+        try:
+            with calculation_timeout(12):
+                return _divergence_steps(validated)
+        except ExpressionError as e:
+            return _error("invalid_expression", str(e))
+        except ComputationTimeout:
+            return _error("computation_timeout", "Divergence computation timed out.", 504)
+        except Exception:
+            logger.exception("Divergence computation failure.")
+            return _error("internal_error", "Could not compute the divergence.", 500)
+
+    if operation == "curl":
+        components_raw = body.get("components")
+        validated = _validate_vector_components(components_raw)
+        if validated is None:
+            return _error(
+                "malformed_request",
+                "'components' must be an array of exactly 3 objects {var: 'x'|'y'|'z', expr: string}.",
+                400,
+            )
+        try:
+            with calculation_timeout(12):
+                return _curl_steps(validated)
+        except ExpressionError as e:
+            return _error("invalid_expression", str(e))
+        except ComputationTimeout:
+            return _error("computation_timeout", "Curl computation timed out.", 504)
+        except Exception:
+            logger.exception("Curl computation failure.")
+            return _error("internal_error", "Could not compute the curl.", 500)
 
     try:
         expr = safe_parse(expr_str)

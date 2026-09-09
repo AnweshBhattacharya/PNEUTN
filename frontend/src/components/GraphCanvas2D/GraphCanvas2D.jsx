@@ -245,6 +245,12 @@ export default function GraphCanvas2D({
   xRange = null,
   yRange = null,
   extraVars = {},
+  // Graph controls passed from App for the toolbar dropdown
+  onShowAreaChange = null,
+  onShowTangentChange = null,
+  onShowDerivativeChange = null,
+  onShowGridChange = null,
+  onShowVolumeRevChange = null,
 }) {
   const mountRef        = useRef(null)
   const sceneRef        = useRef(null)
@@ -283,6 +289,7 @@ export default function GraphCanvas2D({
 
   const [hoverInfo,  setHoverInfo]  = useState(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [controlsOpen, setControlsOpen] = useState(false)
   const [viewBounds, setViewBounds] = useState(null)
   const [canvasSize, setCanvasSize] = useState({ w: 600, h: 400 })
   const [volRevVal,  setVolRevVal]  = useState(null)
@@ -750,6 +757,9 @@ export default function GraphCanvas2D({
   }, [showGrid, buildStaticGeo])
 
   // ── Sync equations → Three.js lines ────────────────────────────────────
+  // exprKey: stable string that changes only when an expression text changes,
+  // not when React creates a new array reference with the same contents.
+  const exprKey = equations.map(e => e.expr).join('|')
   useEffect(() => {
     const scene = sceneRef.current; if (!scene) return
     const cc = curveColors()
@@ -843,7 +853,7 @@ export default function GraphCanvas2D({
         volRevMeshRef.current = vm
       }
     }
-  }, [equations, showArea, showVolumeRev, resampleAll, getViewBounds, showDerivative, activeCurveIndex, extraVars])
+  }, [equations.length, exprKey, showArea, showVolumeRev, resampleAll, getViewBounds, showDerivative, activeCurveIndex, extraVars])
 
   // ── Show/hide derivative overlays ─────────────────────────────────────────
   useEffect(() => {
@@ -979,6 +989,39 @@ export default function GraphCanvas2D({
               <span className={styles.angleBadge}>{hoverInfo.angle}°</span>
             </span>
           )}
+          {/* Graph controls dropdown button */}
+          <div className={styles.ctrlWrap}>
+            <button
+              className={`${styles.toolBtn} ${controlsOpen ? styles.toolBtnActive : ''}`}
+              onClick={() => setControlsOpen(o => !o)}
+              title="Graph controls"
+              aria-label="Toggle graph controls"
+              aria-expanded={controlsOpen}
+            >
+              <span className="material-symbols-outlined">settings</span>
+            </button>
+            {controlsOpen && (
+              <>
+                <div className={styles.ctrlOverlay} onClick={() => setControlsOpen(false)} />
+                <div className={styles.ctrlDropdown}>
+                  {[
+                    { label: 'Area shading',        value: showArea,       cb: onShowAreaChange },
+                    { label: 'Tangent line',         value: showTangent,    cb: onShowTangentChange },
+                    { label: "Derivative f′(x)",     value: showDerivative, cb: onShowDerivativeChange },
+                    { label: 'Grid',                 value: showGrid,       cb: onShowGridChange },
+                    { label: 'Volume of Revolution', value: showVolumeRev,  cb: onShowVolumeRevChange },
+                  ].map(({ label, value, cb }) => (
+                    <label key={label} className={styles.ctrlRow}>
+                      <input type="checkbox" className={styles.ctrlCheck}
+                        checked={value}
+                        onChange={e => cb?.(e.target.checked)} />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button className={styles.toolBtn} onClick={resetView} title="Reset view">
             <svg xmlns="http://www.w3.org/2000/svg" height="18px" viewBox="0 -960 960 960" width="18px" fill="currentColor" aria-hidden="true">
               <path d="M480-320v-100q0-25 17.5-42.5T540-480h100v60H540v100h-60Zm60 240q-25 0-42.5-17.5T480-140v-100h60v100h100v60H540Zm280-240v-100H720v-60h100q25 0 42.5 17.5T880-420v100h-60ZM720-80v-60h100v-100h60v100q0 25-17.5 42.5T820-80H720Zm111-480h-83q-26-88-99-144t-169-56q-117 0-198.5 81.5T200-480q0 72 32.5 132t87.5 98v-110h80v240H160v-80h94q-62-50-98-122.5T120-480q0-75 28.5-140.5t77-114q48.5-48.5 114-77T480-840q129 0 226.5 79.5T831-560Z"/>

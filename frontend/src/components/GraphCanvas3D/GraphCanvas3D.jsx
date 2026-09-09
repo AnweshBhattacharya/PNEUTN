@@ -105,6 +105,12 @@ export default function GraphCanvas3D({
   riemannError = null,
   onToggleRiemannBars = null,
   onRequestRiemann = null,
+  // Settings callbacks for toolbar dropdown
+  onShowVolumeChange = null,
+  onShowGridChange = null,
+  onShowWireframeChange = null,
+  onShowTangentChange = null,
+  onShowDerivativeChange = null,
 }) {
   const mountRef     = useRef(null)
   const sceneRef     = useRef(null)
@@ -141,6 +147,7 @@ export default function GraphCanvas3D({
 
   const [hoverCoord, setHoverCoord] = useState(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [controlsOpen, setControlsOpen] = useState(false)
   const [autoRotate, setAutoRotate] = useState(true)
   const [volumeEst,  setVolumeEst]  = useState(null)
   const [hasError,   setHasError]   = useState(false)

@@ -1,395 +1,476 @@
-/* EquationInput.module.css — RawBlock minimalist design */
+/* EquationInput.module.css — compact no-scroll layout */
 
 .wrapper {
-  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   background: var(--surface-raised);
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  animation: fadeUp var(--duration-slow) var(--ease-out) both;
-  border-bottom: 1px solid var(--border-color);
-}
-
-/* ── Header ── */
-.header {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: var(--sp-3);
-  padding-bottom: var(--sp-2);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.title {
-  font-family: var(--font-headline);
-  font-size: 24px;
-  line-height: 1.05;
-  font-weight: 400;
-  color: var(--content-primary);
-  letter-spacing: -0.01em;
-}
-
-.subtitle {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: 0.08em;
-  color: var(--content-tertiary);
-  text-transform: uppercase;
-}
-
-/* ── MathLive input ── */
-.inputRow { width: 100%; }
-
-.formatHint {
-  margin: 0;
-  color: var(--content-tertiary);
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  line-height: 1.45;
-}
-
-.mathField {
-  width: 100%;
-  min-height: 56px;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 0 !important;
-  background: var(--surface-sunken) !important;
-  font-family: var(--font-mono) !important;
-  font-size: 18px !important;
-  padding: var(--sp-2) var(--sp-3) !important;
-  box-sizing: border-box;
-  transition: border-color var(--duration-fast) var(--ease-out) !important;
-
-  --contains-highlight-backround-color: var(--surface-hover);
-  --caret-color: var(--content-primary);
-  --selection-background-color: var(--accent-muted);
-}
-.mathField:focus-within {
-  border-color: var(--accent) !important;
-  outline: none;
-}
-
-/* ── Error hint ── */
-.errorHint {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  color: var(--color-error);
-  padding: var(--sp-1) var(--sp-2);
-  background: color-mix(in srgb, var(--color-error) 8%, transparent);
-  border-radius: 0;
-  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
-}
-
-/* ── Smart suggestions ── */
-.suggestions {
-  list-style: none;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-color);
-  border-radius: 0;
-  margin: 0;
-  padding: var(--sp-1);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  animation: slideDown var(--duration-fast) var(--ease-out) both;
-}
-
-.suggestion {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px var(--sp-2);
-  border-radius: 0;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-.suggestion:hover,
-.suggestion:focus {
-  background: var(--surface-hover);
-  outline: none;
-}
-
-.suggestCompletion {
-  font-family: var(--font-mono);
-  font-size: var(--text-small);
-  font-weight: 700;
-  color: var(--content-primary);
-}
-.suggestDesc {
-  font-size: var(--text-tiny);
-  color: var(--content-tertiary);
-  margin-left: var(--sp-2);
-}
-
-/* ── Controls section ── */
-.controls {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--border-color);
-}
-
-.controlRow {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: flex-start;
-}
-.controlRow .controlGroup {
-  flex: 1;
-}
-
-.controlGroup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.controlLabel {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: var(--tracking-button);
-  text-transform: uppercase;
-  color: var(--content-tertiary);
-}
-
-/* ── Pill toggle group ── */
-.pillGroup {
-  display: flex;
-  border: 1px solid var(--border-color);
-  border-radius: 0;
   overflow: hidden;
-  background: var(--surface-sunken);
 }
 
-.pill {
+/* ── 1. Category tabs ── */
+.catTabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.catTab {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  letter-spacing: var(--tracking-chip);
-  padding: 6px var(--sp-2);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 7px 4px;
   border: none;
-  border-radius: 0;
+  border-right: 1px solid var(--border-color);
+  background: var(--surface-sunken);
+  color: var(--content-tertiary);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.catTab:last-child { border-right: none; }
+.catTab:hover { background: var(--surface-hover); color: var(--content-primary); }
+.catTabActive {
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  font-weight: 700;
+  border-bottom: 2px solid var(--content-primary);
+  margin-bottom: -1px;
+}
+
+/* ── 2. Operation row ── */
+.opRow {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.opBtn {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 4px;
+  border: none;
+  border-right: 1px solid var(--border-color);
   background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
-  white-space: nowrap;
+  transition: background var(--duration-fast), color var(--duration-fast);
   text-align: center;
+  white-space: nowrap;
 }
-.pill + .pill {
-  border-left: 1px solid var(--border-color);
-}
-.pill:hover:not(.pillActive) {
-  background: var(--surface-hover);
-  color: var(--content-primary);
-}
-.pillActive {
+.opBtn:last-child { border-right: none; }
+.opBtn:hover { background: var(--surface-hover); color: var(--content-primary); }
+.opBtnActive {
   background: var(--content-primary);
   color: var(--surface-base);
   font-weight: 700;
 }
 
-/* ── Stepper ── */
-.stepperRow {
+/* ── 3. Sub-controls ── */
+.subControls {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
-  align-items: center;
-  gap: var(--sp-1);
+  flex-direction: column;
+  gap: 4px;
+  /* No fixed min-height — let content dictate height uniformly across modes */
 }
 
-.stepperBtn {
-  width: 28px;
-  height: 28px;
+.inlineRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Variable / wrt pills */
+.varPills {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.varPill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 7px;
   border: 1px solid var(--border-color);
   border-radius: 0;
-  background: var(--surface-raised);
+  background: transparent;
   color: var(--content-secondary);
   cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  white-space: nowrap;
+}
+.varPill:hover { background: var(--surface-hover); color: var(--content-primary); }
+.varPillActive { background: var(--content-primary); color: var(--surface-base); font-weight: 700; border-color: var(--content-primary); }
+
+/* Integral specific */
+.integralControls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.integralStep {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* Single-row strip: pills + checkbox + bounds + counter */
+.integralStepRow {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  line-height: 1;
-  transition: background var(--duration-fast), border-color var(--duration-fast);
+  gap: 6px;
+  flex-wrap: wrap;
 }
-.stepperBtn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--content-tertiary);
-  color: var(--content-primary);
-}
-.stepperBtn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.stepperValue {
-  font-family: var(--font-mono);
-  font-size: var(--text-mono);
-  font-weight: 700;
-  color: var(--content-primary);
-  min-width: 20px;
-  text-align: center;
-}
-
-/* ── Bounds row ── */
-.boundsToggleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-
-.toggle {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-}
-.toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-  position: absolute;
-}
-.toggleTrack {
-  position: absolute;
-  inset: 0;
-  background: var(--border-color);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-out);
-}
-.toggle input:checked + .toggleTrack {
-  background: var(--accent);
-}
-.toggleThumb {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 14px;
-  height: 14px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform var(--duration-fast) var(--ease-out);
-  pointer-events: none;
-  box-shadow: none;
-  border: 1px solid var(--border-color);
-}
-.toggle input:checked ~ .toggleThumb {
-  transform: translateX(16px);
-}
-
-.toggleLabel {
-  font-family: var(--font-mono);
-  font-size: var(--text-tiny);
-  color: var(--content-secondary);
-  cursor: pointer;
-  letter-spacing: 0.04em;
-}
-
+/* Bounds pair: [a] → [b] */
 .boundsRow {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  margin-top: var(--sp-1);
-  animation: fadeIn var(--duration-fast) var(--ease-out) both;
+  gap: 4px;
+}
+/* Counter pushed to the right */
+.integralCounter {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.microLabel {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--content-tertiary);
+}
+.microBtn {
+  width: 20px; height: 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--content-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--duration-fast);
+}
+.microBtn:hover:not(:disabled) { background: var(--surface-hover); color: var(--content-primary); }
+.microBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+.microVal {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--content-primary);
+  min-width: 14px;
+  text-align: center;
 }
 
+/* Native checkbox */
+.checkLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--content-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.checkboxInput {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+.checkboxInput:checked { background: var(--content-primary); border-color: var(--content-primary); }
+.checkboxInput:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px; top: -1px;
+  width: 4px; height: 7px;
+  border-right: 1.5px solid var(--surface-raised);
+  border-bottom: 1.5px solid var(--surface-raised);
+  transform: rotate(45deg);
+}
+
+/* Bounds inputs */
 .boundInput {
   font-family: var(--font-mono);
-  font-size: var(--text-mono);
-  width: 72px;
-  padding: 6px 10px;
+  font-size: 11px;
+  width: 48px;
+  padding: 3px 6px;
   border: 1px solid var(--border-color);
   border-radius: 0;
   background: var(--surface-sunken);
   color: var(--content-primary);
   transition: border-color var(--duration-fast);
 }
-.boundInput:focus {
-  border-color: var(--accent);
-  outline: none;
-}
-
+.boundInput:focus { border-color: var(--accent); outline: none; }
 .boundSep {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 11px;
   color: var(--content-tertiary);
-  letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 
-/* ── Action row ── */
-.actionRow {
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  position: sticky;
-  bottom: 0;
-  background: var(--surface-raised);
-  z-index: 10;
-  margin-top: auto;
-}
-
-.shortcutHint {
+/* Coming soon badge */
+.comingNotice {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--content-tertiary);
-  text-align: center;
   letter-spacing: 0.04em;
+  padding: 4px 0;
 }
 
-.solveBtnArrow {
-  transition: transform var(--duration-fast) var(--ease-out);
-  display: inline-block;
-}
-.solveBtn:hover:not(:disabled) .solveBtnArrow {
-  transform: translateX(4px);
+/* ── 4. Field ── */
+.fieldWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
 }
 
-.solveBtn {
-  width: 100%;
+/* Quick-insert symbol toolbar */
+.symbolBar {
+  display: flex;
+  gap: 2px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-base);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.symbolBtn {
   font-family: var(--font-mono);
-  font-size: var(--text-small);
-  letter-spacing: var(--tracking-button);
+  font-size: 11px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  color: var(--content-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.symbolBtn:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+  border-color: var(--content-primary);
+}
+.mathField {
+  flex: 1;
+  width: 100%;
+  /* Larger min-height lets fractions and square roots render without clipping */
+  min-height: 72px;
+  border: none !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  border-radius: 0 !important;
+  background: var(--surface-sunken) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 20px !important;
+  padding: 10px var(--sp-3) !important;
+  box-sizing: border-box;
+  transition: background var(--duration-fast) !important;
+  --latex-font-scale: 1.1;
+  --contains-highlight-backround-color: var(--surface-hover);
+  --caret-color: var(--content-primary);
+  --selection-background-color: var(--accent-muted);
+  overflow: visible !important;
+}
+.mathField:focus-within { background: var(--surface-hover) !important; }
+
+.errorHint {
+  font-family: var(--font-mono);
+  font-size: var(--text-tiny);
+  color: var(--color-error);
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  flex-shrink: 0;
+}
+
+/* ── Suggestions ── */
+.suggestions {
+  list-style: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-color);
+  border-top: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  left: 0; right: 0;
+  top: 100%;
+  z-index: 20;
+}
+.suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+.suggestion:hover, .suggestionActive { background: var(--surface-hover); }
+.suggestCompletion {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--content-primary);
+}
+.suggestDesc {
+  font-size: 10px;
+  color: var(--content-tertiary);
+  margin-left: 8px;
+}
+
+/* ── 5. Action row ── */
+.actionRow {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+}
+.actionBtns {
+  display: flex;
+}
+.solveBtn {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 12px var(--sp-4);
-  border: 1px solid var(--content-primary);
+  padding: 11px var(--sp-4);
+  border: none;
   border-radius: 0;
   background: var(--content-primary);
   color: var(--surface-base);
   cursor: pointer;
-  transition:
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
+  transition: background var(--duration-fast), transform var(--duration-fast);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-2);
+  gap: 6px;
 }
-.solveBtn:hover:not(:disabled) {
+.solveBtn:hover:not(:disabled) { background: var(--content-secondary); }
+.solveBtn:active:not(:disabled) { transform: scale(0.99); }
+.solveBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* View graph button — equal width, secondary style */
+.viewGraphBtn {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 11px var(--sp-4);
+  border: none;
+  border-left: 1px solid var(--surface-base);
+  border-radius: 0;
+  background: var(--content-primary);
+  color: var(--surface-base);
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  opacity: 0.8;
+}
+.viewGraphBtn:hover {
   background: var(--content-secondary);
-  border-color: var(--content-secondary);
+  opacity: 1;
 }
-.solveBtn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-.solveBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.solveBtnArrow { display: inline-block; transition: transform var(--duration-fast); }
+.solveBtn:hover:not(:disabled) .solveBtnArrow { transform: translateX(3px); }
 .solveBtn .spinner {
-  width: 14px;
-  height: 14px;
+  width: 12px; height: 12px;
   border: 2px solid rgba(255,255,255,0.3);
   border-top-color: #fff;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
 }
-@keyframes spin {
-  to { transform: rotate(360deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Equation tabs (inside EquationInput, below category/op tabs) ── */
+.eqTabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-base);
+  min-height: 30px;
+  flex-shrink: 0;
 }
+.eqTabs::-webkit-scrollbar { display: none; }
+
+.eqTab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: none;
+  border-top: 2px solid transparent;
+  background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  border-right: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.eqTab:hover { background: var(--surface-hover); color: var(--content-secondary); }
+.eqTabActive {
+  background: var(--surface-raised);
+  color: var(--content-primary);
+  border-top-width: 2px;
+}
+.eqDot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.eqTabLabel {
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eqTabClose {
+  width: 14px; height: 14px;
+  border: none; background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer; font-size: 12px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  transition: color var(--duration-fast);
+  flex-shrink: 0;
+}
+.eqTabClose:hover { color: var(--color-error); }
+.addEqBtn {
+  width: 30px;
+  border: none;
+  border-left: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--content-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast), color var(--duration-fast);
+  flex-shrink: 0;
+}
+.addEqBtn:hover { background: var(--surface-hover); color: var(--accent); }

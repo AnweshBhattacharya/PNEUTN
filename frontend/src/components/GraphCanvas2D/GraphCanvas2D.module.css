@@ -65,21 +65,27 @@
 .toolbarRight {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex-shrink: 0;
+  gap: 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .coordBadge {
   font-family: var(--font-mono);
-  font-size: var(--text-tiny);
+  font-size: 10px;
   color: var(--content-secondary);
   background: var(--surface-sunken);
-  padding: 2px 8px;
-  border-radius: 0;
+  padding: 2px 6px;
   border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
-  gap: 8px;
-  animation: fadeIn var(--duration-fast) var(--ease-out) both;
+  gap: 5px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .areaBadge {
   font-family: var(--font-mono);
@@ -309,4 +315,79 @@
   background: var(--surface-raised);
   letter-spacing: 0.03em;
   flex-shrink: 0;
+}
+
+/* ── Graph controls dropdown ── */
+.ctrlWrap { position: relative; }
+
+.toolBtnActive {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+  border-color: var(--content-primary);
+}
+
+.ctrlOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+}
+
+.ctrlDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  background: var(--surface-raised);
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 3px 3px 0 var(--border-color);
+  animation: ctrlFadeIn 120ms ease both;
+}
+@keyframes ctrlFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ctrlRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--content-secondary);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+  transition: background var(--duration-fast), color var(--duration-fast);
+}
+.ctrlRow:last-child { border-bottom: none; }
+.ctrlRow:hover { background: var(--surface-hover); color: var(--content-primary); }
+
+.ctrlCheck {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: background var(--duration-fast), border-color var(--duration-fast);
+}
+.ctrlCheck:checked {
+  background: var(--content-primary);
+  border-color: var(--content-primary);
+}
+.ctrlCheck:checked::after {
+  content: '';
+  position: absolute;
+  left: 2px; top: -1px;
+  width: 4px; height: 7px;
+  border-right: 1.5px solid var(--surface-raised);
+  border-bottom: 1.5px solid var(--surface-raised);
+  transform: rotate(45deg);
 }

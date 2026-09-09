@@ -8,6 +8,7 @@ import React, { useState } from 'react'
 import katex from 'katex'
 import styles from './StepPanel.module.css'
 
+
 export function KatexDisplay({ latex, block = false }) {
   if (!latex) return null
   let html = ''
@@ -47,70 +48,110 @@ function SubSteps({ substeps }) {
   )
 }
 
+/**
+ * VectorResult — renders gradient / curl results as a components table.
+ * For divergence (no components), falls back to the scalar result box.
+ */
+function VectorResult({ operationType, components, result }) {
+  const opLabel = {
+    gradient: '\u2207f',
+    curl: '\u2207 \u00d7 F',
+    divergence: '\u2207 \u00b7 F',
+  }[operationType] ?? 'Result'
+
+  if (operationType === 'divergence' || !components?.length) {
+    // Scalar result
+    return (
+      <div className={styles.vectorBox}>
+        <span className={styles.vectorLabel}>{opLabel} =</span>
+        <div className={styles.resultLatex}>
+          <KatexDisplay latex={result} block />
+        </div>
+      </div>
+    )
+  }
+
+  // Column vector: one row per component
+  return (
+    <div className={styles.vectorBox}>
+      <span className={styles.vectorLabel}>{opLabel}</span>
+      <table className={styles.vectorTable}>
+        <tbody>
+          {components.map(({ var: v, latex: ltx }) => (
+            <tr key={v} className={styles.vectorRow}>
+              <td className={styles.vectorVar}>∂f/∂{v}</td>
+              <td className={styles.vectorEquals}>=</td>
+              <td className={styles.vectorVal}><KatexDisplay latex={ltx} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function StepItem({ step, index }) {
-  const [open, setOpen] = useState(true)
+  const [showExplanation, setShowExplanation] = useState(false)
 
   const ruleName = step.rule?.replace(/_/g, ' ') ?? ''
+  const bodyId = `step-body-${index}`
+  const hasDetail = step.explanation || step.before_latex || step.substeps?.length > 0
 
   return (
-    <li className={styles.step} style={{ animationDelay: `${index * 55}ms` }}>
-      <button
-        className={styles.stepHeader}
-        onClick={() => setOpen(o => !o)}
-        aria-expanded={open}
-        type="button"
+    <li
+      className={styles.step}
+      style={{ animationDelay: `${index * 40}ms` }}
+      onMouseEnter={() => hasDetail && setShowExplanation(true)}
+      onMouseLeave={() => setShowExplanation(false)}
+    >
+      {/* ── Compact card row ── */}
+      <div className={styles.stepRow}>
+        <span className={styles.stepNum}>{index + 1}</span>
+        <span className={styles.ruleChip}>{ruleName}</span>
+        <span className={styles.stepEquals}>=</span>
+        <div className={styles.stepResult}>
+          <KatexDisplay latex={step.after_latex} block={false} />
+        </div>
+        {hasDetail && (
+          <button
+            className={`${styles.stepInfoBtn} ${showExplanation ? styles.stepInfoBtnActive : ''}`}
+            type="button"
+            aria-expanded={showExplanation}
+            aria-controls={bodyId}
+            onClick={e => { e.stopPropagation(); setShowExplanation(v => !v) }}
+            title="Explanation"
+          >
+            <span className={`${styles.narratedBy} ${step.narrated_by === 'gemini' ? styles.gemini : styles.fallback}`}>
+              {step.narrated_by === 'gemini' ? '✦' : '⚙'}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Explanation — always in DOM, height-animated via CSS class ── */}
+      <div
+        id={bodyId}
+        className={`${styles.stepExplanation} ${showExplanation ? styles.stepExplanationVisible : ''}`}
+        aria-hidden={!showExplanation}
       >
-        <div className={styles.stepMeta}>
-          <span className={styles.stepNum}>Step {index + 1}</span>
-          <span className={styles.ruleChip}>{ruleName}</span>
-          <span className={`${styles.narratedBy} ${step.narrated_by === 'gemini' ? styles.gemini : styles.fallback}`}>
-            {step.narrated_by === 'gemini' ? '✦ Gemini' : '⚙ Template'}
-          </span>
-          {step.substeps?.length > 0 && (
-            <span className={styles.subChip}>{step.substeps.length} sub-steps</span>
-          )}
-        </div>
-        <span className={`${styles.stepChevron} ${open ? styles.stepChevronOpen : ''}`}>▼</span>
-      </button>
-
-      {open && (
-        <div className={styles.stepBody}>
-          {/* Before → After transformation */}
-          <div className={styles.transformation}>
-            <div className={styles.transformRow}>
-              <span className={styles.transformLabel}>Before</span>
-              <div className={styles.katexWrap}>
-                <KatexDisplay latex={step.before_latex} block />
-              </div>
-            </div>
-
-            <div className={styles.arrowRow}>
-              <span className={styles.arrow}>↓</span>
-              <span className={styles.arrowLabel}>{ruleName}</span>
-            </div>
-
-            <div className={styles.transformRow}>
-              <span className={styles.transformLabel}>After</span>
-              <div className={styles.katexWrap}>
-                <KatexDisplay latex={step.after_latex} block />
-              </div>
-            </div>
+        {step.before_latex && (
+          <div className={styles.stepBeforeRow}>
+            <span className={styles.transformLabel}>from</span>
+            <KatexDisplay latex={step.before_latex} block={false} />
           </div>
-
-          {/* Sub-steps (e.g. per-term, chain rule decomposition) */}
+        )}
+        {step.explanation && (
+          <p className={styles.explanation}>{step.explanation}</p>
+        )}
+        {step.substeps?.length > 0 && (
           <SubSteps substeps={step.substeps} />
-
-          {/* English explanation */}
-          {step.explanation && (
-            <p className={styles.explanation}>{step.explanation}</p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </li>
   )
 }
 
-export default function StepPanel({ result, steps = [], loading, error, isLocal }) {
+export default function StepPanel({ result, steps = [], loading, error, isLocal, operationType, components }) {
   const isEmpty = !loading && !result && steps.length === 0 && !error
   const [copied, setCopied] = useState(false)
 
@@ -174,23 +215,27 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal 
       )}
 
       {result && !loading && (
-        <div className={styles.resultBox}>
-          <div className={styles.resultHeader}>
-            <span className={styles.resultLabel}>Result</span>
-            <button
-              type="button"
-              className={styles.copyBtn}
-              onClick={copyResult}
-              aria-label="Copy LaTeX result"
-              title="Copy LaTeX result"
-            >
-              {copied ? 'Copied!' : 'Copy LaTeX'}
-            </button>
-          </div>
-          <div className={styles.resultLatex}>
-            <KatexDisplay latex={result} block />
-          </div>
-        </div>
+        operationType && ['gradient', 'curl', 'divergence'].includes(operationType)
+          ? <VectorResult operationType={operationType} components={components} result={result} />
+          : (
+            <div className={styles.resultBox}>
+              <div className={styles.resultHeader}>
+                <span className={styles.resultLabel}>Result</span>
+                <button
+                  type="button"
+                  className={styles.copyBtn}
+                  onClick={copyResult}
+                  aria-label="Copy LaTeX result"
+                  title="Copy LaTeX result"
+                >
+                  {copied ? 'Copied!' : 'Copy LaTeX'}
+                </button>
+              </div>
+              <div className={styles.resultLatex}>
+                <KatexDisplay latex={result} block />
+              </div>
+            </div>
+          )
       )}
 
       {steps.length > 0 && !loading && (
