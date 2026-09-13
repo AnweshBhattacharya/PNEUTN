@@ -22,7 +22,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import * as THREE from 'three'
-import { sample1D } from '../../lib/mathEval'
+import { sample1D, evalAt, compileExpr } from '../../lib/mathEval'
 import styles from './GraphCanvas2D.module.css'
 
 const N_POINTS = 600
@@ -224,6 +224,426 @@ function sampleDerivative(expr, xL, xR, n, extraVars = {}) {
   return pts
 }
 
+// ── Helper: evaluate a plain math string at (x, y) using mathEval ─────────
+function evalXY(exprStr, x, y) {
+  try {
+    return evalAt(compileExpr(exprStr), { x, y }) ?? 0
+  } catch {
+    return 0
+  }
+}
+
+// ── VectorFieldOverlay ────────────────────────────────────────────────────
+/**
+ * SVG overlay that draws a 2D vector-field arrow grid.
+ * - Dynamic arrow sizing: arrow length is proportional to field magnitude.
+ * - Centered arrows with crisp SVG polygon arrowheads and anchor points.
+ * - Gradient, Divergence, and Curl supported with clear color-mapping.
+ */
+function VectorFieldOverlay({ config, viewBounds, width, height }) {
+  const COLS = 15
+  const ROWS = 12
+  const [xL, xR, yB, yT] = viewBounds
+
+  const toSx = (wx) => ((wx - xL) / (xR - xL)) * width
+  const toSy = (wy) => height - ((wy - yB) / (yT - yB)) * height
+
+  const dx = (xR - xL) / COLS
+  const dy = (yT - yB) / ROWS
+  const cellPx = Math.min((width / COLS), (height / ROWS))
+  const maxArrowLen = cellPx * 0.85
+  const minArrowLen = cellPx * 0.25
+
+  // First pass: compute all raw vectors and find max magnitude for dynamic scaling
+  const rawData = []
+  let maxMag = 1e-6
+
+  for (let ci = 0; ci < COLS; ci++) {
+    for (let ri = 0; ri < ROWS; ri++) {
+      const wx = xL + (ci + 0.5) * dx
+      const wy = yB + (ri + 0.5) * dy
+
+      let vx = 0, vy = 0
+
+      if (config.operation === 'gradient' && config.expr) {
+        const h = 1e-4
+        const f = (xx, yy) => evalXY(config.expr, xx, yy)
+        vx = (f(wx + h, wy) - f(wx - h, wy)) / (2 * h)
+        vy = (f(wx, wy + h) - f(wx, wy - h)) / (2 * h)
+      } else if ((config.operation === 'divergence' || config.operation === 'curl') && config.components) {
+        const byVar = {}
+        for (const c of config.components) byVar[c.var] = c.expr
+        const P = byVar['x'] ?? '0'
+        const Q = byVar['y'] ?? '0'
+
+        if (config.operation === 'divergence') {
+          vx = evalXY(P, wx, wy)
+          vy = evalXY(Q, wx, wy)
+        } else {
+          // 2D curl: curl z-component = dQ/dx - dP/dy
+          const h = 1e-4
+          const dQdx = (evalXY(Q, wx + h, wy) - evalXY(Q, wx - h, wy)) / (2 * h)
+          const dPdy = (evalXY(P, wx, wy + h) - evalXY(P, wx, wy - h)) / (2 * h)
+          const curlZ = dQdx - dPdy
+          const rLen = Math.hypot(wx, wy) || 1
+          vx = -wy / rLen * Math.sign(curlZ) * Math.min(Math.abs(curlZ), 5)
+          vy =  wx / rLen * Math.sign(curlZ) * Math.min(Math.abs(curlZ), 5)
+        }
+      }
+
+      const mag = Math.hypot(vx, vy)
+      if (isFinite(mag) && mag > 1e-9) {
+        if (mag > maxMag) maxMag = mag
+        rawData.push({ wx, wy, vx, vy, mag })
+      }
+    }
+  }
+
+  // Second pass: scale arrows proportionally to sqrt(magnitude)
+  const arrows = rawData.map(item => {
+    const sx = toSx(item.wx)
+    const sy = toSy(item.wy)
+
+    // Smooth square-root scaling so subtle vectors remain visible and strong vectors don't overflow
+    const normMag = Math.min(Math.sqrt(item.mag) / Math.sqrt(maxMag || 1), 1)
+    const arrowLen = minArrowLen + normMag * (maxArrowLen - minArrowLen)
+
+    const nx = item.vx / item.mag
+    const ny = item.vy / item.mag
+
+    // Centered around sample point
+    const startX = sx - nx * (arrowLen * 0.4)
+    const startY = sy + ny * (arrowLen * 0.4) // canvas y flipped
+    const endX   = sx + nx * (arrowLen * 0.6)
+    const endY   = sy - ny * (arrowLen * 0.6)
+
+    // Color gradient: cyan (cool/low) -> amber (medium) -> crimson (high)
+    const t = normMag
+    let color
+    if (t < 0.5) {
+      const f = t / 0.5
+      // cyan (6, 182, 212) to amber (245, 158, 11)
+      const r = Math.round(6 + f * (245 - 6))
+      const g = Math.round(182 + f * (158 - 182))
+      const b = Math.round(212 + f * (11 - 212))
+      color = `rgb(${r},${g},${b})`
+    } else {
+      const f = (t - 0.5) / 0.5
+      // amber (245, 158, 11) to crimson (239, 68, 68)
+      const r = Math.round(245 + f * (239 - 245))
+      const g = Math.round(158 + f * (68 - 158))
+      const b = Math.round(11 + f * (68 - 11))
+      color = `rgb(${r},${g},${b})`
+    }
+
+    // Polygon arrowhead points
+    const headSize = Math.max(5, arrowLen * 0.32)
+    const angle = Math.atan2(endY - startY, endX - startX)
+    const p1x = endX - headSize * Math.cos(angle - 0.45)
+    const p1y = endY - headSize * Math.sin(angle - 0.45)
+    const p2x = endX - headSize * Math.cos(angle + 0.45)
+    const p2y = endY - headSize * Math.sin(angle + 0.45)
+    const polyPoints = `${endX.toFixed(1)},${endY.toFixed(1)} ${p1x.toFixed(1)},${p1y.toFixed(1)} ${p2x.toFixed(1)},${p2y.toFixed(1)}`
+
+    return {
+      startX, startY, endX, endY,
+      polyPoints, color,
+      cx: sx, cy: sy,
+      mag: item.mag.toFixed(2),
+    }
+  })
+
+  return (
+    <svg
+      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', overflow: 'visible' }}
+      width={width}
+      height={height}
+      aria-hidden="true"
+    >
+      <defs>
+        <filter id="vectorGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="0" stdDeviation="1.5" floodColor="#000" floodOpacity="0.5" />
+        </filter>
+      </defs>
+      {arrows.map((a, i) => (
+        <g key={i} opacity={0.88} filter="url(#vectorGlow)">
+          {/* Base anchor dot */}
+          <circle cx={a.cx} cy={a.cy} r={1.5} fill={a.color} opacity={0.7} />
+          {/* Shaft */}
+          <line
+            x1={a.startX} y1={a.startY}
+            x2={a.endX} y2={a.endY}
+            stroke={a.color} strokeWidth={1.8} strokeLinecap="round"
+          />
+          {/* Solid arrowhead */}
+          <polygon points={a.polyPoints} fill={a.color} />
+        </g>
+      ))}
+    </svg>
+  )
+}
+
+// ── ODE RK4 Solver Helper ─────────────────────────────────────────────────
+function solveOdeRk4(rhsStr, x0, y0, xL, xR, yB, yT, steps = 140) {
+  const comp = compileExpr(rhsStr)
+  if (!comp) return []
+  const f = (x, y) => {
+    try {
+      const v = evalAt(comp, { x, y, t: x })
+      return isFinite(v) ? v : 0
+    } catch {
+      return 0
+    }
+  }
+
+  const stepSizeForward = (xR - x0) / steps
+  const forwardPts = [{ x: x0, y: y0 }]
+  let curX = x0
+  let curY = y0
+
+  for (let i = 0; i < steps; i++) {
+    const k1 = f(curX, curY)
+    const k2 = f(curX + stepSizeForward / 2, curY + (stepSizeForward * k1) / 2)
+    const k3 = f(curX + stepSizeForward / 2, curY + (stepSizeForward * k2) / 2)
+    const k4 = f(curX + stepSizeForward, curY + stepSizeForward * k3)
+    const nextY = curY + (stepSizeForward / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    curX += stepSizeForward
+    curY = nextY
+    if (!isFinite(curY) || Math.abs(curY) > (yT - yB) * 4) break
+    forwardPts.push({ x: curX, y: curY })
+  }
+
+  const stepSizeBackward = (x0 - xL) / steps
+  const backwardPts = []
+  curX = x0
+  curY = y0
+
+  for (let i = 0; i < steps; i++) {
+    const h = -stepSizeBackward
+    const k1 = f(curX, curY)
+    const k2 = f(curX + h / 2, curY + (h * k1) / 2)
+    const k3 = f(curX + h / 2, curY + (h * k2) / 2)
+    const k4 = f(curX + h, curY + h * k3)
+    const nextY = curY + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    curX += h
+    curY = nextY
+    if (!isFinite(curY) || Math.abs(curY) > (yT - yB) * 4) break
+    backwardPts.unshift({ x: curX, y: curY })
+  }
+
+  return [...backwardPts, ...forwardPts]
+}
+
+// ── OdeDirectionField ─────────────────────────────────────────────────────
+/**
+ * Interactive SVG slope field for dy/dx = f(x, y).
+ * Features:
+ * - Direction field slope hashes colored by slope value.
+ * - Interactive initial condition (x0, y0): click or drag anywhere to reposition!
+ * - Family of 7 solution curves using 4th-order Runge-Kutta (RK4).
+ * - Highlighted active solution curve through the seed point.
+ */
+function OdeDirectionField({ config, viewBounds, width, height }) {
+  const COLS = 22
+  const ROWS = 16
+  const [xL, xR, yB, yT] = viewBounds
+  const { rhs } = config
+
+  const [seedPoint, setSeedPoint] = useState(() => [0, 0])
+  const [isDraggingSeed, setIsDraggingSeed] = useState(false)
+
+  if (!rhs) return null
+
+  const toSx = (wx) => ((wx - xL) / (xR - xL)) * width
+  const toSy = (wy) => height - ((wy - yB) / (yT - yB)) * height
+  const toWx = (sx) => xL + (sx / width) * (xR - xL)
+  const toWy = (sy) => yB + ((height - sy) / height) * (yT - yB)
+
+  const dx = (xR - xL) / COLS
+  const dy = (yT - yB) / ROWS
+  const cellPx = Math.min((width / COLS), (height / ROWS))
+  const segLen = cellPx * 0.48
+
+  // Compute slope segments
+  const segments = []
+  for (let ci = 0; ci <= COLS; ci++) {
+    for (let ri = 0; ri <= ROWS; ri++) {
+      const wx = xL + ci * dx
+      const wy = yB + ri * dy
+      const slope = evalXY(rhs, wx, wy)
+      if (!isFinite(slope)) continue
+
+      const ang = Math.atan(slope)
+      const sx = toSx(wx)
+      const sy = toSy(wy)
+      const halfX = (segLen / 2) * Math.cos(ang)
+      const halfY = (segLen / 2) * Math.sin(ang)
+
+      // Normalize slope color (-4 to +4)
+      const norm = Math.min(Math.abs(slope) / 4, 1)
+      let color
+      if (slope >= 0) {
+        const r = Math.round(180 + norm * 75)
+        const g = Math.round(140 - norm * 60)
+        color = `rgb(${r},${g},30)`
+      } else {
+        const b = Math.round(180 + norm * 75)
+        const g = Math.round(140 - norm * 40)
+        color = `rgb(30,${g},${b})`
+      }
+
+      segments.push({
+        x1: sx - halfX, y1: sy + halfY,
+        x2: sx + halfX, y2: sy - halfY,
+        color,
+      })
+    }
+  }
+
+  // Generate family of 7 solution curves
+  const ySpan = yT - yB
+  const yOffsets = [-0.35, -0.22, -0.10, 0, 0.10, 0.22, 0.35].map(frac => seedPoint[1] + frac * ySpan)
+
+  const curves = yOffsets.map((y0, idx) => {
+    const isMain = idx === 3 // the one passing directly through seedPoint
+    const pts = solveOdeRk4(rhs, seedPoint[0], y0, xL, xR, yB, yT, 140)
+    if (pts.length < 2) return null
+    const pathD = pts
+      .map((p, i) => `${i === 0 ? 'M' : 'L'}${toSx(p.x).toFixed(1)},${toSy(p.y).toFixed(1)}`)
+      .join(' ')
+    return { pathD, isMain }
+  }).filter(Boolean)
+
+  const handlePointerDown = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const sx = e.clientX - rect.left
+    const sy = e.clientY - rect.top
+    const wx = toWx(sx)
+    const wy = toWy(sy)
+    setSeedPoint([wx, wy])
+    setIsDraggingSeed(true)
+  }
+
+  const handlePointerMove = (e) => {
+    if (!isDraggingSeed) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const sx = e.clientX - rect.left
+    const sy = e.clientY - rect.top
+    setSeedPoint([toWx(sx), toWy(sy)])
+  }
+
+  const handlePointerUp = () => {
+    setIsDraggingSeed(false)
+  }
+
+  const seedSx = toSx(seedPoint[0])
+  const seedSy = toSy(seedPoint[1])
+
+  return (
+    <div
+      style={{ position: 'absolute', top: 0, left: 0, width, height, pointerEvents: 'auto' }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      title="Click or drag anywhere to position initial condition (x₀, y₀)"
+    >
+      <svg
+        style={{ width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}
+        aria-label="ODE Slope Field and Integral Curves"
+      >
+        {/* Slope field lines */}
+        {segments.map((s, i) => (
+          <line
+            key={i}
+            x1={s.x1} y1={s.y1}
+            x2={s.x2} y2={s.y2}
+            stroke={s.color}
+            strokeWidth={1.4}
+            opacity={0.65}
+          />
+        ))}
+
+        {/* Family of RK4 integral curves */}
+        {curves.map((c, i) => (
+          <path
+            key={i}
+            d={c.pathD}
+            fill="none"
+            stroke={c.isMain ? 'var(--accent, #2563eb)' : '#38bdf8'}
+            strokeWidth={c.isMain ? 2.8 : 1.3}
+            opacity={c.isMain ? 1.0 : 0.45}
+            strokeDasharray={c.isMain ? 'none' : '4 3'}
+          />
+        ))}
+
+        {/* Interactive Seed Point Marker (x0, y0) */}
+        <g transform={`translate(${seedSx}, ${seedSy})`}>
+          <circle r={9} fill="none" stroke="#2563eb" strokeWidth={2} opacity={0.4} />
+          <circle r={5} fill="#2563eb" stroke="#ffffff" strokeWidth={2} />
+          <rect
+            x={10} y={-18} width={130} height={20}
+            fill="var(--surface-raised, #1c1917)" stroke="var(--border-color, #44403c)"
+            strokeWidth={1} rx={0}
+          />
+          <text
+            x={15} y={-4}
+            fontFamily="var(--font-mono, monospace)" fontSize={10} fontWeight="bold"
+            fill="var(--content-primary, #ffffff)"
+          >
+            (x₀, y₀)=({seedPoint[0].toFixed(2)}, {seedPoint[1].toFixed(2)})
+          </text>
+        </g>
+      </svg>
+
+      {/* ODE Badge */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 8,
+          left: 8,
+          background: 'var(--surface-raised, rgba(20,20,20,0.85))',
+          border: '1px solid var(--border-color, #444)',
+          padding: '4px 8px',
+          fontFamily: 'var(--font-mono, monospace)',
+          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          pointerEvents: 'auto',
+          zIndex: 10,
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <span style={{ color: 'var(--accent, #2563eb)', fontWeight: 'bold' }}>
+          dy/dx = {rhs}
+        </span>
+        <span style={{ color: 'var(--content-secondary, #888)' }}>·</span>
+        <span style={{ color: 'var(--content-secondary, #aaa)' }}>
+          Click canvas to move seed
+        </span>
+        <button
+          type="button"
+          onClick={() => setSeedPoint([0, 0])}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--border-color, #555)',
+            color: 'var(--content-primary, #fff)',
+            padding: '1px 5px',
+            fontSize: '10px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Reset (0,0)
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
+
+
 const DEFAULT_X_MIN = -6
 const DEFAULT_X_MAX = 6
 
@@ -251,6 +671,9 @@ export default function GraphCanvas2D({
   onShowDerivativeChange = null,
   onShowGridChange = null,
   onShowVolumeRevChange = null,
+  // Vector & ODE visualisation configs
+  vectorVisConfig = null,   // { operation, expr?, wrt_vars?, components? }
+  odeVisConfig = null,      // { rhs, wrt }
 }) {
   const mountRef        = useRef(null)
   const sceneRef        = useRef(null)
@@ -1044,6 +1467,22 @@ export default function GraphCanvas2D({
           canvasH={canvasSize.h}
           hoverInfo={hoverInfo}
         />
+        {viewBounds && vectorVisConfig && (
+          <VectorFieldOverlay
+            config={vectorVisConfig}
+            viewBounds={viewBounds}
+            width={canvasSize.w}
+            height={canvasSize.h}
+          />
+        )}
+        {viewBounds && odeVisConfig && (
+          <OdeDirectionField
+            config={odeVisConfig}
+            viewBounds={viewBounds}
+            width={canvasSize.w}
+            height={canvasSize.h}
+          />
+        )}
       </div>
 
       <p className={styles.hint}>

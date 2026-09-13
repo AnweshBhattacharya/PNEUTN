@@ -474,3 +474,53 @@
   flex-shrink: 0;
 }
 .addEqBtn:hover { background: var(--surface-hover); color: var(--accent); }
+
+/* ── Vector component inputs (divergence / curl) ── */
+.vectorComponents {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.vecCompHeader {
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.vecCompRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vecCompLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--content-secondary);
+  white-space: nowrap;
+  min-width: 40px;
+  letter-spacing: 0.04em;
+}
+
+.vecCompInput {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: 0;
+  background: var(--surface-sunken);
+  color: var(--content-primary);
+  transition: border-color var(--duration-fast), background var(--duration-fast);
+  min-width: 0;
+}
+.vecCompInput:focus {
+  border-color: var(--content-primary);
+  outline: none;
+  background: var(--surface-hover);
+}
+.vecCompInput::placeholder {
+  color: var(--content-tertiary);
+  font-size: 10px;
+}

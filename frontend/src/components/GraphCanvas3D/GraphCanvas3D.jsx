@@ -83,6 +83,57 @@ function makeLabel(scene, text, position, dark) {
   return sprite
 }
 
+// ── ODE RK4 Solver Helper for 3D Curves ────────────────────────────────────
+function solveOdeRk4_3D(rhsStr, x0, y0, xL, xR, yB, yT, steps = 140, extraVars = {}) {
+  const comp = compileExpr(rhsStr)
+  if (!comp) return []
+  const f = (x, y) => {
+    try {
+      const v = evalAt(comp, { x, y, t: x, ...extraVars })
+      return isFinite(v) ? v : 0
+    } catch {
+      return 0
+    }
+  }
+
+  const stepSizeForward = (xR - x0) / steps
+  const forwardPts = [{ x: x0, y: y0 }]
+  let curX = x0
+  let curY = y0
+
+  for (let i = 0; i < steps; i++) {
+    const k1 = f(curX, curY)
+    const k2 = f(curX + stepSizeForward / 2, curY + (stepSizeForward * k1) / 2)
+    const k3 = f(curX + stepSizeForward / 2, curY + (stepSizeForward * k2) / 2)
+    const k4 = f(curX + stepSizeForward, curY + stepSizeForward * k3)
+    const nextY = curY + (stepSizeForward / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    curX += stepSizeForward
+    curY = nextY
+    if (!isFinite(curY) || Math.abs(curY) > (yT - yB) * 4) break
+    forwardPts.push({ x: curX, y: curY })
+  }
+
+  const stepSizeBackward = (x0 - xL) / steps
+  const backwardPts = []
+  curX = x0
+  curY = y0
+
+  for (let i = 0; i < steps; i++) {
+    const h = -stepSizeBackward
+    const k1 = f(curX, curY)
+    const k2 = f(curX + h / 2, curY + (h * k1) / 2)
+    const k3 = f(curX + h / 2, curY + (h * k2) / 2)
+    const k4 = f(curX + h, curY + h * k3)
+    const nextY = curY + (h / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+    curX += h
+    curY = nextY
+    if (!isFinite(curY) || Math.abs(curY) > (yT - yB) * 4) break
+    backwardPts.unshift({ x: curX, y: curY })
+  }
+
+  return [...backwardPts, ...forwardPts]
+}
+
 export default function GraphCanvas3D({
   exprStr = 'sin(x) * cos(y)',
   xMin = -4, xMax = 4,
@@ -111,6 +162,10 @@ export default function GraphCanvas3D({
   onShowWireframeChange = null,
   onShowTangentChange = null,
   onShowDerivativeChange = null,
+  // Vector & ODE
+  vectorVisConfig = null,
+  odeVisConfig = null,
+  operationMode = 'scalar',
 }) {
   const mountRef     = useRef(null)
   const sceneRef     = useRef(null)
@@ -125,6 +180,12 @@ export default function GraphCanvas3D({
   const colAttrRef   = useRef(null)
   const skirtPosRef  = useRef(null)
   const floorPosRef  = useRef(null)
+
+  // 3D Vector arrows pool (160 entries) & 3D ODE solution curves pool (14 entries)
+  const vectorArrowPoolRef = useRef([])
+  const odeLinesPoolRef    = useRef([])
+  const [showVectorArrows, setShowVectorArrows] = useState(true)
+  const [showOdeCurves,    setShowOdeCurves]    = useState(true)
 
   // Tangent & Derivative Objects
   const tangentPlaneRef = useRef(null)
@@ -154,9 +215,17 @@ export default function GraphCanvas3D({
 
   const segments = Math.max(8, Math.min(60, n || 40))
 
-  const exprStrRef   = useRef(exprStr)
+  // Determine effective expression for surface manifold:
+  // For ODE: derivative manifold z = f(x, y)
+  // For Gradient: scalar field z = f(x, y)
+  // For Scalar: active expression
+  const effectiveExprStr = odeVisConfig?.rhs
+    || (vectorVisConfig?.operation === 'gradient' && vectorVisConfig.expr)
+    || exprStr
+
+  const exprStrRef   = useRef(effectiveExprStr)
   const extraVarsRef = useRef(extraVars)
-  useEffect(() => { exprStrRef.current = exprStr }, [exprStr])
+  useEffect(() => { exprStrRef.current = effectiveExprStr }, [effectiveExprStr])
   useEffect(() => { extraVarsRef.current = extraVars }, [extraVars])
 
   useEffect(() => {
@@ -511,6 +580,46 @@ export default function GraphCanvas3D({
       riemannBarPoolRef.current.push(mesh)
     }
 
+    // ── Pre-allocate 3D Vector Arrow Pool (up to 160 arrows) ──
+    const arrowPool = []
+    const ARROW_POOL_SIZE = 160
+    for (let i = 0; i < ARROW_POOL_SIZE; i++) {
+      const arr = new THREE.ArrowHelper(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, 0, 0),
+        1,
+        0x2563eb,
+        0.28,
+        0.16
+      )
+      arr.visible = false
+      scene.add(arr)
+      arrowPool.push(arr)
+    }
+    vectorArrowPoolRef.current = arrowPool
+
+    // ── Pre-allocate 3D ODE Solution Curve Pool (14 lines: 7 manifold + 7 floor) ──
+    const odeLines = []
+    const ODE_CURVES_COUNT = 14
+    const ODE_PTS = 140
+    for (let i = 0; i < ODE_CURVES_COUNT; i++) {
+      const geo = new THREE.BufferGeometry()
+      const posAttr = new THREE.BufferAttribute(new Float32Array(ODE_PTS * 3), 3)
+      posAttr.setUsage(THREE.DynamicDrawUsage)
+      geo.setAttribute('position', posAttr)
+      const isFloor = i >= 7
+      const mat = new THREE.LineBasicMaterial({
+        color: isFloor ? (dark ? 0x64748b : 0x94a3b8) : (i % 2 === 0 ? 0x06b6d4 : 0xf59e0b),
+        transparent: true,
+        opacity: isFloor ? 0.35 : 0.95,
+      })
+      const l = new THREE.Line(geo, mat)
+      l.visible = false
+      scene.add(l)
+      odeLines.push({ line: l, posAttr })
+    }
+    odeLinesPoolRef.current = odeLines
+
     const ro = new ResizeObserver(() => {
       const nW = Math.max(mount.clientWidth || 1, 1)
       const nH = Math.max(mount.clientHeight || 1, 1)
@@ -527,6 +636,8 @@ export default function GraphCanvas3D({
       ro.disconnect()
       renderer.dispose()
       riemannBarPoolRef.current = []
+      vectorArrowPoolRef.current = []
+      odeLinesPoolRef.current = []
       if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement)
     }
   }, [segments]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -566,13 +677,24 @@ export default function GraphCanvas3D({
   useEffect(() => {
     if (!posAttrRef.current || !colAttrRef.current) return
 
-    const comp = compileExpr(exprStr)
+    const isSpatialVector = vectorVisConfig && (vectorVisConfig.operation === 'divergence' || vectorVisConfig.operation === 'curl')
+    if (meshRef.current) meshRef.current.visible = !isSpatialVector
+    if (wireMeshRef.current) wireMeshRef.current.visible = !isSpatialVector && showWireframe
+    if (skirtMeshRef.current) skirtMeshRef.current.visible = !isSpatialVector && showVolume
+    if (floorMeshRef.current) floorMeshRef.current.visible = !isSpatialVector && showVolume
+
+    if (isSpatialVector) {
+      setHasError(false)
+      return
+    }
+
+    const comp = compileExpr(effectiveExprStr)
     if (!comp) {
       setHasError(true)
       return
     }
 
-    const zVals = sample2DGrid(exprStr, xMin, xMax, yMin, yMax, segments, extraVars)
+    const zVals = sample2DGrid(effectiveExprStr, xMin, xMax, yMin, yMax, segments, extraVars)
     const pos = posAttrRef.current.array
     const col = colAttrRef.current.array
     const nTotal = (segments + 1) ** 2
@@ -688,7 +810,7 @@ export default function GraphCanvas3D({
       fp[9] = xMax; fp[10] = 0; fp[11] = yMax
       floorPosRef.current.needsUpdate = true
     }
-  }, [exprStr, extraVars, xMin, xMax, yMin, yMax, zMinLimit, zMaxLimit, segments, samplePoint, onVolumeCalculated])
+  }, [effectiveExprStr, vectorVisConfig, extraVars, xMin, xMax, yMin, yMax, zMinLimit, zMaxLimit, segments, samplePoint, onVolumeCalculated, showVolume, showWireframe])
 
   // ── B7: 3D Derivative Cross-Section Overlay Lines ───────────────────────
   useEffect(() => {
@@ -762,7 +884,7 @@ export default function GraphCanvas3D({
 
     dot.position.set(markedX, zVal, markedY)
     dot.visible = true
-  }, [markedX, markedY, exprStr, extraVars])
+  }, [markedX, markedY, effectiveExprStr, extraVars])
 
   // ── 3D Riemann bars pool update ─────────────────────────────────────────
   useEffect(() => {
@@ -788,6 +910,194 @@ export default function GraphCanvas3D({
     }
   }, [riemannRects, showRiemannBars])
 
+  // ── 3D Vector Field Pool Update ──────────────────────────────────────────
+  useEffect(() => {
+    const pool = vectorArrowPoolRef.current
+    if (!pool || pool.length === 0) return
+
+    if (!vectorVisConfig || !showVectorArrows) {
+      pool.forEach(a => { a.visible = false })
+      return
+    }
+
+    if (vectorVisConfig.operation === 'gradient') {
+      const gExpr = vectorVisConfig.expr || effectiveExprStr
+      const comp = compileExpr(gExpr)
+      if (!comp) {
+        pool.forEach(a => { a.visible = false })
+        return
+      }
+
+      const GRID_N = 11 // 11x11 = 121 arrows
+      const xStep = (xMax - xMin) / (GRID_N - 1)
+      const yStep = (yMax - yMin) / (GRID_N - 1)
+      const h = 1e-4
+      let arrowIdx = 0
+
+      // First pass to find max magnitude for dynamic normalization
+      const samples = []
+      let maxM = 1e-6
+
+      for (let j = 0; j < GRID_N; j++) {
+        const wy = yMin + j * yStep
+        for (let i = 0; i < GRID_N; i++) {
+          const wx = xMin + i * xStep
+          try {
+            const z = evalAt(comp, { x: wx, y: wy, ...extraVars }) ?? 0
+            if (!isFinite(z)) continue
+            const z_xp = evalAt(comp, { x: wx + h, y: wy, ...extraVars }) ?? z
+            const z_xm = evalAt(comp, { x: wx - h, y: wy, ...extraVars }) ?? z
+            const z_yp = evalAt(comp, { x: wx, y: wy + h, ...extraVars }) ?? z
+            const z_ym = evalAt(comp, { x: wx, y: wy - h, ...extraVars }) ?? z
+            const fx = (z_xp - z_xm) / (2 * h)
+            const fy = (z_yp - z_ym) / (2 * h)
+            const m = Math.hypot(fx, fy)
+            if (isFinite(m) && m > 1e-7) {
+              if (m > maxM) maxM = m
+              samples.push({ wx, wy, z, fx, fy, m })
+            }
+          } catch {}
+        }
+      }
+
+      samples.forEach(s => {
+        if (arrowIdx >= pool.length) return
+        const arrow = pool[arrowIdx++]
+        // Math coordinates: (wx, wy), height z
+        // Three.js coordinates: X = wx, Y = z, Z = wy
+        // Tangent vector along steepest ascent: (fx, m * 0.8, fy)
+        const dir = new THREE.Vector3(s.fx, s.m * 0.8, s.fy).normalize()
+        const norm = Math.min(Math.sqrt(s.m) / Math.sqrt(maxM || 1), 1)
+        const len = 0.35 + norm * 0.95
+        const clr = heightColor(norm)
+
+        arrow.position.set(s.wx, s.z + 0.04, s.wy)
+        arrow.setDirection(dir)
+        arrow.setLength(len, len * 0.28, len * 0.16)
+        arrow.setColor(clr)
+        arrow.visible = true
+      })
+
+      for (let k = arrowIdx; k < pool.length; k++) pool[k].visible = false
+
+    } else if (vectorVisConfig.operation === 'divergence' || vectorVisConfig.operation === 'curl') {
+      const byVar = {}
+      for (const c of (vectorVisConfig.components || [])) byVar[c.var] = c.expr
+      const Pcomp = compileExpr(byVar['x'] ?? '0')
+      const Qcomp = compileExpr(byVar['y'] ?? '0')
+      const Rcomp = compileExpr(byVar['z'] ?? '0')
+
+      const GRID_3D = 5 // 5x5x5 = 125 arrows
+      const xStep = (xMax - xMin) / (GRID_3D - 1)
+      const yStep = (yMax - yMin) / (GRID_3D - 1)
+      const zLow = -3, zHigh = 3
+      const zStep = (zHigh - zLow) / (GRID_3D - 1)
+
+      const samples = []
+      let maxM = 1e-6
+
+      for (let k = 0; k < GRID_3D; k++) {
+        const wz = zLow + k * zStep
+        for (let j = 0; j < GRID_3D; j++) {
+          const wy = yMin + j * yStep
+          for (let i = 0; i < GRID_3D; i++) {
+            const wx = xMin + i * xStep
+            try {
+              const vx = evalAt(Pcomp, { x: wx, y: wy, z: wz }) ?? 0
+              const vy = evalAt(Qcomp, { x: wx, y: wy, z: wz }) ?? 0
+              const vz = evalAt(Rcomp, { x: wx, y: wy, z: wz }) ?? 0
+              const m = Math.hypot(vx, vy, vz)
+              if (isFinite(m) && m > 1e-6) {
+                if (m > maxM) maxM = m
+                samples.push({ wx, wy, wz, vx, vy, vz, m })
+              }
+            } catch {}
+          }
+        }
+      }
+
+      let arrowIdx = 0
+      samples.forEach(s => {
+        if (arrowIdx >= pool.length) return
+        const arrow = pool[arrowIdx++]
+        // Three.js coords: X = wx, Y = wz (up), Z = wy
+        const dir = new THREE.Vector3(s.vx, s.vz, s.vy).normalize()
+        const norm = Math.min(Math.sqrt(s.m) / Math.sqrt(maxM || 1), 1)
+        const len = 0.35 + norm * 0.9
+        const clr = heightColor(norm)
+
+        arrow.position.set(s.wx, s.wz, s.wy)
+        arrow.setDirection(dir)
+        arrow.setLength(len, len * 0.28, len * 0.16)
+        arrow.setColor(clr)
+        arrow.visible = true
+      })
+
+      for (let k = arrowIdx; k < pool.length; k++) pool[k].visible = false
+    }
+  }, [vectorVisConfig, showVectorArrows, effectiveExprStr, xMin, xMax, yMin, yMax, extraVars])
+
+  // ── 3D ODE Solution Curves & Trajectories Update ─────────────────────────
+  useEffect(() => {
+    const pool = odeLinesPoolRef.current
+    if (!pool || pool.length === 0) return
+
+    if (!odeVisConfig || !odeVisConfig.rhs || !showOdeCurves) {
+      pool.forEach(item => { item.line.visible = false })
+      return
+    }
+
+    const rhsStr = odeVisConfig.rhs
+    const comp = compileExpr(rhsStr)
+    if (!comp) {
+      pool.forEach(item => { item.line.visible = false })
+      return
+    }
+
+    const ODE_PTS = 140
+    const ySpan = yMax - yMin
+    const seedsY = [-0.35, -0.22, -0.10, 0, 0.10, 0.22, 0.35].map(frac => frac * ySpan)
+    const x0 = (xMin + xMax) / 2
+
+    seedsY.forEach((y0, idx) => {
+      const manifoldItem = pool[idx]
+      const floorItem = pool[idx + 7]
+      if (!manifoldItem || !floorItem) return
+
+      const pts = solveOdeRk4_3D(rhsStr, x0, y0, xMin, xMax, yMin, yMax, Math.floor(ODE_PTS / 2), extraVars)
+      if (pts.length < 2) {
+        manifoldItem.line.visible = false
+        floorItem.line.visible = false
+        return
+      }
+
+      // Populate position buffers
+      const mPos = manifoldItem.posAttr
+      const fPos = floorItem.posAttr
+      const count = Math.min(pts.length, ODE_PTS)
+
+      for (let k = 0; k < count; k++) {
+        const px = pts[k].x
+        const py = pts[k].y
+        const pz = evalAt(comp, { x: px, y: py, t: px, ...extraVars }) ?? 0
+
+        // Manifold line: (x, z+0.05, y) in Three.js coordinates
+        mPos.setXYZ(k, px, isFinite(pz) ? pz + 0.05 : 0, py)
+        // Floor line: (x, 0.02, y) on ground plane
+        fPos.setXYZ(k, px, 0.02, py)
+      }
+
+      mPos.needsUpdate = true
+      fPos.needsUpdate = true
+      manifoldItem.line.geometry.setDrawRange(0, count)
+      floorItem.line.geometry.setDrawRange(0, count)
+      manifoldItem.line.computeLineDistances?.()
+      floorItem.line.computeLineDistances?.()
+      manifoldItem.line.visible = true
+      floorItem.line.visible = true
+    })
+  }, [odeVisConfig, showOdeCurves, xMin, xMax, yMin, yMax, extraVars])
+
   return (
     <div className={`${styles.wrapper} ${isExpanded ? styles.expanded : ''}`}>
       <div className={styles.toolbar}>
@@ -804,6 +1114,32 @@ export default function GraphCanvas3D({
           </button>
           {autoRotate && !isExpanded && (
             <span className={styles.rotateBadge}>auto-rotating</span>
+          )}
+          {vectorVisConfig && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: 'var(--accent, #2563eb)',
+              fontWeight: 600,
+              background: 'var(--surface-raised)',
+              padding: '2px 8px',
+              border: '1px solid var(--border-color)',
+            }}>
+              ∇ {vectorVisConfig.operation === 'gradient' ? 'Gradient Field' : vectorVisConfig.operation === 'divergence' ? 'Divergence Field' : 'Curl Field'}
+            </span>
+          )}
+          {odeVisConfig && (
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '11px',
+              color: 'var(--accent, #2563eb)',
+              fontWeight: 600,
+              background: 'var(--surface-raised)',
+              padding: '2px 8px',
+              border: '1px solid var(--border-color)',
+            }}>
+              dy/dx = {odeVisConfig.rhs} · 3D Trajectories
+            </span>
           )}
         </div>
         <div className={styles.toolbarRight}>
@@ -870,6 +1206,35 @@ export default function GraphCanvas3D({
           </span>
         )}
       </div>
+
+      {/* ── Vector / ODE 3D Layer Toggles ── */}
+      {vectorVisConfig && (
+        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={showVectorArrows}
+              onChange={e => setShowVectorArrows(e.target.checked)}
+              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+            />
+            Show 3D Vector Arrows (∇)
+          </label>
+        </div>
+      )}
+
+      {odeVisConfig && (
+        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
+            <input
+              type="checkbox"
+              checked={showOdeCurves}
+              onChange={e => setShowOdeCurves(e.target.checked)}
+              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+            />
+            Show 3D Integral Curves &amp; Phase Trajectories
+          </label>
+        </div>
+      )}
 
       <div className={styles.canvas} ref={mountRef} style={{ position: 'relative' }}>
         {hasError && (

@@ -320,3 +320,109 @@ export async function integralOrder({ curve_upper, curve_lower, order }) {
     throw e
   }
 }
+
+import { localGradient, localDivergence, localCurl } from './localSolve'
+
+function isUnreachableError(e) {
+  return (
+    e.name === 'AbortError' ||
+    e.code === 'no_backend' ||
+    (e instanceof TypeError && /fetch|network|failed/i.test(e.message))
+  )
+}
+
+/**
+ * POST /solve — gradient of a scalar field f(x,y,z).
+ * Payload: { operation: 'gradient', expr, wrt_vars }
+ * Response: { result_latex, components, steps, operation_type }
+ */
+export async function gradient({ expr, wrt_vars = ['x', 'y', 'z'] }) {
+  if (!BASE_URL) {
+    return localGradient({ expr, wrt_vars })
+  }
+  try {
+    return await post('/solve', { operation: 'gradient', expr, wrt_vars })
+  } catch (e) {
+    if (isUnreachableError(e)) {
+      console.warn('[apiClient] Backend unreachable — using local gradient:', e.message)
+      return { ...localGradient({ expr, wrt_vars }), _local: true }
+    }
+    throw e
+  }
+}
+
+/**
+ * POST /solve — divergence of F = (P, Q, R).
+ * Payload: { operation: 'divergence', components: [{var, expr}, …] }
+ */
+export async function divergence({ components }) {
+  if (!BASE_URL) {
+    return localDivergence({ components })
+  }
+  try {
+    return await post('/solve', { operation: 'divergence', components })
+  } catch (e) {
+    if (isUnreachableError(e)) {
+      console.warn('[apiClient] Backend unreachable — using local divergence:', e.message)
+      return { ...localDivergence({ components }), _local: true }
+    }
+    throw e
+  }
+}
+
+/**
+ * POST /solve — curl of F = (P, Q, R).
+ * Payload: { operation: 'curl', components: [{var, expr}, …] }
+ */
+export async function curl({ components }) {
+  if (!BASE_URL) {
+    return localCurl({ components })
+  }
+  try {
+    return await post('/solve', { operation: 'curl', components })
+  } catch (e) {
+    if (isUnreachableError(e)) {
+      console.warn('[apiClient] Backend unreachable — using local curl:', e.message)
+      return { ...localCurl({ components }), _local: true }
+    }
+    throw e
+  }
+}
+
+/**
+ * POST /solve — solve an ODE.
+ * Payload: { operation: 'ode', ode }
+ * The backend uses SymPy's dsolve; the local fallback returns an informational result.
+ */
+export async function ode({ ode: odeExpr }) {
+  if (!BASE_URL) {
+    return {
+      result_latex: `\\text{ODE solver requires the backend (SymPy)}`,
+      steps: [{
+        rule: 'default',
+        before_latex: odeExpr,
+        after_latex: '\\text{Connect the backend for a symbolic solution.}',
+        explanation: 'ODE solving requires the SymPy backend. Run SAM locally or deploy to AWS.',
+        narrated_by: 'fallback_template',
+      }],
+      result_numeric_sample: [],
+      operation_type: 'ode',
+      _local: true,
+    }
+  }
+  try {
+    return await post('/solve', { operation: 'ode', ode: odeExpr })
+  } catch (e) {
+    if (isUnreachableError(e)) {
+      console.warn('[apiClient] Backend unreachable — ODE fallback:', e.message)
+      return {
+        result_latex: `\\text{ODE solver requires the backend (SymPy)}`,
+        steps: [],
+        result_numeric_sample: [],
+        operation_type: 'ode',
+        _local: true,
+      }
+    }
+    throw e
+  }
+}

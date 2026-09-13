@@ -433,3 +433,161 @@ export function localSolve({
     }
   }
 }
+
+// ── Vector calculus local fallbacks ────────────────────────────────────────
+// These mirror the backend _gradient_steps / _divergence_steps / _curl_steps
+// response shapes so they can be used as offline substitutes.
+
+const VECTOR_NARRATION = {
+  gradient_component: (v) => `Partial derivative of the scalar field with respect to ${v} — treating all other variables as constants.`,
+  divergence_sum:     () => 'Divergence: sum the partial derivative of each component with respect to its own variable.',
+  curl_component:     () => 'Curl component: subtract the cross-partial derivatives — the signed difference of the two off-axis partials.',
+  simplify:           () => 'Simplify by combining like terms.',
+}
+
+function partialDerivative(exprStr, wrt) {
+  try {
+    const node = math.parse(exprStr)
+    const d = math.derivative(node, wrt)
+    return d.toString()
+  } catch {
+    return `∂(${exprStr})/∂${wrt}`
+  }
+}
+
+/**
+ * Local gradient: ∇f for a scalar field expression.
+ * @param {{ expr: string, wrt_vars: string[] }}
+ * @returns {{ result_latex, components, steps, operation_type }}
+ */
+export function localGradient({ expr, wrt_vars = ['x', 'y', 'z'] }) {
+  const components = []
+  const steps = []
+  const colRows = []
+
+  for (const v of wrt_vars) {
+    const partial = partialDerivative(expr, v)
+    const partialLatex = toLatex(partial)
+    colRows.push(partialLatex)
+    components.push({ var: v, latex: partialLatex })
+    steps.push({
+      rule: 'gradient_component',
+      before_latex: `\\frac{\\partial f}{\\partial ${v}}`,
+      after_latex: partialLatex,
+      explanation: VECTOR_NARRATION.gradient_component(v),
+      narrated_by: 'fallback_template',
+    })
+  }
+
+  const rowsLatex = colRows.join(' \\\\ ')
+  const result_latex = `\\begin{pmatrix} ${rowsLatex} \\end{pmatrix}`
+
+  return {
+    result_latex,
+    components,
+    steps,
+    result_numeric_sample: [],
+    operation_type: 'gradient',
+    _local: true,
+  }
+}
+
+/**
+ * Local divergence: ∂P/∂x + ∂Q/∂y + ∂R/∂z.
+ * @param {{ components: Array<{var: string, expr: string}> }}
+ */
+export function localDivergence({ components }) {
+  const steps = []
+  const termLatexes = []
+  let totalStr = '0'
+
+  for (const item of components) {
+    const partial = partialDerivative(item.expr, item.var)
+    const partialLatex = toLatex(partial)
+    termLatexes.push(partialLatex)
+    steps.push({
+      rule: 'divergence_sum',
+      before_latex: `\\frac{\\partial ${item.var.toUpperCase()}}{\\partial ${item.var}}`,
+      after_latex: partialLatex,
+      explanation: VECTOR_NARRATION.divergence_sum(),
+      narrated_by: 'fallback_template',
+    })
+    // Accumulate string for simple display
+    totalStr = totalStr === '0' ? partial : `${totalStr} + ${partial}`
+  }
+
+  const result_latex = toLatex(totalStr)
+  steps.push({
+    rule: 'simplify',
+    before_latex: termLatexes.join(' + '),
+    after_latex: result_latex,
+    explanation: VECTOR_NARRATION.simplify(),
+    narrated_by: 'fallback_template',
+  })
+
+  return {
+    result_latex,
+    components: [],
+    steps,
+    result_numeric_sample: [],
+    operation_type: 'divergence',
+    _local: true,
+  }
+}
+
+/**
+ * Local curl: computes the three components of ∇×F.
+ * @param {{ components: Array<{var: string, expr: string}> }}
+ */
+export function localCurl({ components }) {
+  const byVar = {}
+  for (const c of components) byVar[c.var] = c.expr
+  const P = byVar['x'] ?? '0'
+  const Q = byVar['y'] ?? '0'
+  const R = byVar['z'] ?? '0'
+
+  const curlDefs = [
+    { axis: 'x', a: R, da: 'y', b: Q, db: 'z', label: '\\partial R/\\partial y - \\partial Q/\\partial z' },
+    { axis: 'y', a: P, da: 'z', b: R, db: 'x', label: '\\partial P/\\partial z - \\partial R/\\partial x' },
+    { axis: 'z', a: Q, da: 'x', b: P, db: 'y', label: '\\partial Q/\\partial x - \\partial P/\\partial y' },
+  ]
+
+  const steps = []
+  const resultComponents = []
+  const colRows = []
+
+  for (const { axis, a, da, b, db, label } of curlDefs) {
+    const dA = partialDerivative(a, da)
+    const dB = partialDerivative(b, db)
+    // result = dA - dB (as string — just concat for display)
+    let valStr
+    try {
+      const val = math.simplify(`(${dA}) - (${dB})`)
+      valStr = val.toString()
+    } catch {
+      valStr = `(${dA}) - (${dB})`
+    }
+    const valLatex = toLatex(valStr)
+    colRows.push(valLatex)
+    resultComponents.push({ var: axis, latex: valLatex })
+    steps.push({
+      rule: 'curl_component',
+      before_latex: label,
+      after_latex: valLatex,
+      explanation: VECTOR_NARRATION.curl_component(),
+      narrated_by: 'fallback_template',
+    })
+  }
+
+  const rowsLatex = colRows.join(' \\\\ ')
+  const result_latex = `\\begin{pmatrix} ${rowsLatex} \\end{pmatrix}`
+
+  return {
+    result_latex,
+    components: resultComponents,
+    steps,
+    result_numeric_sample: [],
+    operation_type: 'curl',
+    _local: true,
+  }
+}

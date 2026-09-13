@@ -109,6 +109,10 @@ def handler(event, context):
             inner = riemann.handle(body)
         elif route == "/integral-order":
             inner = integral_order.handle(body)
+        elif route == "/ode":
+            inner = solve.handle_ode(body)
+        elif route == "/vector":
+            inner = solve.handle_vector(body)
         else:
             return _resp(404, {"error": "not_found",
                                "message": "Unknown API route."})

@@ -9,7 +9,7 @@ import StepPanel from './components/StepPanel/StepPanel'
 import RiemannControls from './components/RiemannControls/RiemannControls'
 import RegionToggle from './components/RegionToggle/RegionToggle'
 import LoadingBar from './components/shared/LoadingBar'
-import { solve as callSolve, riemann as callRiemann } from './lib/apiClient'
+import { solve as callSolve, riemann as callRiemann, gradient as callGradient, divergence as callDivergence, curl as callCurl, ode as callOde } from './lib/apiClient'
 import styles from './App.module.css'
 
 const EQ_COLORS = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
@@ -87,6 +87,20 @@ export default function App() {
 
   // Free parameter slider values keyed by param name
   const [paramValues, setParamValues] = useState({})
+
+  // Operation mode — tracks the kind of last completed solve for visualization routing
+  // 'scalar' | 'vector_gradient' | 'vector_divergence' | 'vector_curl' | 'ode'
+  const [operationMode, setOperationMode] = useState('scalar')
+
+  // Last vector solve result for canvas visualisation
+  const [vectorSolveData, setVectorSolveData] = useState(null)
+  // { operation: 'gradient'|'divergence'|'curl', components: [...], expr, wrt_vars }
+  const [vectorVisConfig, setVectorVisConfig] = useState(null)
+
+  // Last ODE solve data for direction-field canvas
+  const [odeSolveData, setOdeSolveData] = useState(null)
+  // { rhs: string, wrt: string } — for plotting the slope field
+  const [odeVisConfig, setOdeVisConfig] = useState(null)
 
   // Viewport range sliders (SliderSidebar → GraphCanvas2D)
   const [xRange, setXRange] = useState([-10, 10])
@@ -203,13 +217,46 @@ export default function App() {
     updateEquation(id, { loading: true, error: null, result: null, steps: [] })
     setMobilePanel('steps')
     try {
-      const data = await callSolve(params)
+      let data
+
+      if (params.operation === 'gradient') {
+        data = await callGradient({ expr: params.expr, wrt_vars: params.wrt_vars })
+        setOperationMode('vector_gradient')
+        setVectorSolveData(data)
+        setVectorVisConfig({ operation: 'gradient', expr: params.expr, wrt_vars: params.wrt_vars })
+        setOdeVisConfig(null)
+      } else if (params.operation === 'divergence') {
+        data = await callDivergence({ components: params.components })
+        setOperationMode('vector_divergence')
+        setVectorSolveData(data)
+        setVectorVisConfig({ operation: 'divergence', components: params.components })
+        setOdeVisConfig(null)
+      } else if (params.operation === 'curl') {
+        data = await callCurl({ components: params.components })
+        setOperationMode('vector_curl')
+        setVectorSolveData(data)
+        setVectorVisConfig({ operation: 'curl', components: params.components })
+        setOdeVisConfig(null)
+      } else if (params.operation === 'ode') {
+        data = await callOde({ ode: params.ode })
+        setOperationMode('ode')
+        setOdeSolveData(data)
+        setOdeVisConfig({ rhs: params._odeRhs, wrt: params._odeWrt })
+        setVectorVisConfig(null)
+      } else {
+        data = await callSolve(params)
+        setOperationMode('scalar')
+        setVectorVisConfig(null)
+        setOdeVisConfig(null)
+      }
+
       updateEquation(id, {
         loading: false,
         result: data.result_latex,
         steps: data.steps ?? [],
         isLocal: !!data._local,
         numericSample: data.result_numeric_sample ?? [],
+        operationType: data.operation_type ?? params.operation ?? 'derivative',
       })
     } catch (e) {
       updateEquation(id, { loading: false, error: e.message || 'An error occurred.' })
@@ -858,6 +905,8 @@ export default function App() {
                   onShowDerivativeChange={setShowDerivative}
                   onShowGridChange={setShowGrid}
                   onShowVolumeRevChange={setShowVolumeRev}
+                  vectorVisConfig={vectorVisConfig}
+                  odeVisConfig={odeVisConfig}
                 />
 
                 {activeEq.numericSample?.length > 0 && (
@@ -909,6 +958,9 @@ export default function App() {
                     if (!val) setRiemannBars3DRects([])
                   }}
                   onRequestRiemann={handleRiemann3DRequest}
+                  vectorVisConfig={vectorVisConfig}
+                  odeVisConfig={odeVisConfig}
+                  operationMode={operationMode}
                 />
               </div>
             </div>

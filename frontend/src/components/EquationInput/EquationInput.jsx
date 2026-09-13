@@ -13,6 +13,7 @@ import 'mathlive'
 import { getSuggestions, lastToken, validateExpr, checkBalance } from '../../lib/smartSyntax'
 import { normaliseMathExpression, extractVariables } from '../../lib/mathInput'
 import styles from './EquationInput.module.css'
+import { gradient as callGradient, divergence as callDivergence, curl as callCurl, ode as callOde } from '../../lib/apiClient'
 
 function getExpressionValue(mathfield) {
   // Get the ascii-math representation for the backend.
@@ -126,6 +127,23 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     { wrt: 'x', boundsEnabled: false, boundLo: '0', boundHi: '1' }
   ])
   const [totalWrt, setTotalWrt] = useState('t')
+
+  // ── Vector field state ─────────────────────────────────────────────
+  // Gradient: which variables to differentiate with respect to
+  const [gradWrtVars, setGradWrtVars] = useState(['x', 'y', 'z'])
+  // Divergence / Curl: three component inputs P(x,y,z), Q(x,y,z), R(x,y,z)
+  const [vecComponents, setVecComponents] = useState([
+    { var: 'x', expr: '' },
+    { var: 'y', expr: '' },
+    { var: 'z', expr: '' },
+  ])
+
+  // ── ODE state ─────────────────────────────────────────────────────
+  const [odeWrt, setOdeWrt] = useState('x')  // independent variable for ODE
+
+  // isComing: true when the current operation has no usable implementation yet.
+  // Currently false for all operations — all are implemented.
+  const isComing = false
 
   const effectiveOperation = operation === 'derivative' && isTotalDerivative
     ? 'total_derivative'
@@ -334,6 +352,52 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   }
 
   const handleSolve = () => {
+    setBalanceError(null)
+
+    // ── Vector operations ─────────────────────────────────────────────
+    if (operation === 'gradient') {
+      if (!mlRef.current) return
+      const expr = normaliseMathExpression(getExpressionValue(mlRef.current) || value || '')
+      if (!expr.trim()) { setBalanceError('Enter a scalar field expression.'); return }
+      onSolve?.({
+        operation: 'gradient',
+        expr,
+        wrt_vars: gradWrtVars,
+      })
+      return
+    }
+
+    if (operation === 'divergence' || operation === 'curl') {
+      const empty = vecComponents.filter(c => !c.expr.trim())
+      if (empty.length > 0) {
+        setBalanceError('All three component expressions (P, Q, R) are required.')
+        return
+      }
+      onSolve?.({
+        operation,
+        components: vecComponents,
+      })
+      return
+    }
+
+    // ── ODE ───────────────────────────────────────────────────────────
+    if (operation === 'ode') {
+      if (!mlRef.current) return
+      const expr = normaliseMathExpression(getExpressionValue(mlRef.current) || value || '')
+      if (!expr.trim()) { setBalanceError('Enter the right-hand side f(x,y) of dy/dx = f.'); return }
+      // Build SymPy-compatible ODE string: Derivative(y(x), x) - f(x, y(x))
+      // The backend accepts this form for dsolve().
+      const odeStr = `Derivative(y(${odeWrt}), ${odeWrt}) - (${expr.replace(/\by\b/g, `y(${odeWrt})`)})`
+      onSolve?.({
+        operation: 'ode',
+        ode: odeStr,
+        _odeRhs: expr,   // pass raw RHS for direction-field visualisation
+        _odeWrt: odeWrt,
+      })
+      return
+    }
+
+    // ── Scalar operations ─────────────────────────────────────────────
     if (!mlRef.current) return
     let expr = normaliseMathExpression(getExpressionValue(mlRef.current) || value || '')
     // Strip trailing differential symbols (dx, dy, dz, dt) that the user typed
@@ -345,7 +409,6 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     }
     const err = validateExpr(expr)
     if (err) { setBalanceError(err); return }
-    setBalanceError(null)
 
     if (effectiveOperation === 'integral') {
       for (const step of integrationSequence) {
@@ -395,7 +458,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     }
   }
 
-  const isComing = ['gradient', 'divergence', 'curl', 'ode'].includes(operation)
+
 
   return (
     <div className={styles.wrapper}>
@@ -610,16 +673,89 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           </div>
         )}
 
-        {/* Vector: coming-soon notice */}
-        {['gradient','divergence','curl'].includes(operation) && (
-          <span className={styles.comingNotice}>
-            {operation === 'gradient' ? 'Scalar field f(x,y,z)' : 'Vector field F = (P, Q, R)'} — backend coming soon
-          </span>
+        {/* ── Vector: Gradient — scalar field + ∂/∂ variable selector ── */}
+        {operation === 'gradient' && (
+          <>
+            <div className={styles.inlineRow}>
+              <span className={styles.microLabel}>f(x,y,z) — enter scalar field above</span>
+            </div>
+            <div className={styles.inlineRow}>
+              <span className={styles.microLabel}>∇ with respect to:</span>
+              <div className={styles.varPills} role="group" aria-label="Gradient variables">
+                {['x','y','z'].map(v => (
+                  <button key={v} type="button"
+                    className={`${styles.varPill} ${gradWrtVars.includes(v) ? styles.varPillActive : ''}`}
+                    onClick={() => setGradWrtVars(prev =>
+                      prev.includes(v)
+                        ? prev.filter(w => w !== v).length > 0 ? prev.filter(w => w !== v) : prev
+                        : [...prev, v]
+                    )}
+                    aria-pressed={gradWrtVars.includes(v)}
+                  >
+                    ∂/{v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
         )}
 
-        {/* ODE: coming-soon notice */}
+        {/* ── Vector: Divergence / Curl — three component inputs ── */}
+        {(operation === 'divergence' || operation === 'curl') && (
+          <div className={styles.vectorComponents}>
+            <div className={styles.vecCompHeader}>
+              <span className={styles.microLabel}>
+                {operation === 'divergence' ? '∇·F' : '∇×F'} where F = (P, Q, R)
+              </span>
+            </div>
+            {vecComponents.map((comp, idx) => (
+              <div key={comp.var} className={styles.vecCompRow}>
+                <span className={styles.vecCompLabel}>
+                  {['P','Q','R'][idx]}<sub>({comp.var})</sub>=
+                </span>
+                <input
+                  type="text"
+                  id={`vec-comp-${comp.var}`}
+                  className={styles.vecCompInput}
+                  placeholder={`expression in x,y,z  (e.g. ${comp.var === 'x' ? 'x*y' : comp.var === 'y' ? '-y^2' : 'z'})`}
+                  value={comp.expr}
+                  onChange={e => {
+                    const val = e.target.value
+                    setVecComponents(prev => prev.map((c, i) => i === idx ? { ...c, expr: val } : c))
+                  }}
+                  aria-label={`${['P','Q','R'][idx]} component`}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── ODE: dy/dx = f(x,y) ── */}
         {operation === 'ode' && (
-          <span className={styles.comingNotice}>ODE solver — coming soon</span>
+          <>
+            <div className={styles.inlineRow}>
+              <span className={styles.microLabel}>dy/d</span>
+              <div className={styles.varPills} role="group" aria-label="ODE independent variable">
+                {['x','t'].map(v => (
+                  <button key={v} type="button"
+                    className={`${styles.varPill} ${odeWrt === v ? styles.varPillActive : ''}`}
+                    onClick={() => setOdeWrt(v)}
+                    aria-pressed={odeWrt === v}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+              <span className={styles.microLabel} style={{ marginLeft: 8 }}>
+                = f({odeWrt}, y) — enter f above
+              </span>
+            </div>
+            <div className={styles.inlineRow}>
+              <span className={styles.microLabel} style={{ opacity: 0.65 }}>
+                e.g. for dy/d{odeWrt} = {odeWrt}·y, type <code style={{fontFamily:'monospace'}}>{odeWrt}*y</code>
+              </span>
+            </div>
+          </>
         )}
       </div>
 
