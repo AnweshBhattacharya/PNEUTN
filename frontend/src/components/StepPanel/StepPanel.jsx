@@ -106,7 +106,7 @@ function StepItem({ step, index }) {
     >
       {/* ── Compact card row ── */}
       <div className={styles.stepRow}>
-        <span className={styles.stepNum}>{index + 1}</span>
+        <span className={styles.stepNum}>Step {index + 1}</span>
         <span className={styles.ruleChip}>{ruleName}</span>
         <span className={styles.stepEquals}>=</span>
         <div className={styles.stepResult}>
