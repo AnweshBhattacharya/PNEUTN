@@ -9,9 +9,9 @@
   font-size: var(--text-tiny);
   text-transform: uppercase;
   letter-spacing: var(--tracking-button);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   cursor: pointer;
-  border: 1px solid transparent;
+  border: var(--border-thick);
   transition:
     background var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
@@ -24,7 +24,6 @@
 }
 .btn:hover:not(.disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .btn:active:not(.disabled) {
   transform: scale(0.97) translateY(0);

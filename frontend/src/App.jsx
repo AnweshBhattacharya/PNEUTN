@@ -12,8 +12,14 @@ import LoadingBar from './components/shared/LoadingBar'
 import { solve as callSolve, riemann as callRiemann, gradient as callGradient, divergence as callDivergence, curl as callCurl, ode as callOde } from './lib/apiClient'
 import styles from './App.module.css'
 
-const EQ_COLORS = ['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed']
-const EQ_COLORS_DARK = ['#e8e6e1', '#60a5fa', '#f87171', '#4ade80', '#fbbf24', '#a78bfa']
+const CSS_COLOR_VARS = [
+  '--content-primary',
+  '--color-info',
+  '--color-error',
+  '--color-success',
+  '--color-warning',
+  '--color-purple'
+]
 
 const EXAMPLE_EXPRS = [
   { label: 'x² sin x', expr: 'x^2*sin(x)', wrt: 'x', operation: 'derivative' },
@@ -75,6 +81,19 @@ export default function App() {
   const [equations, setEquations] = useState([makeEq('')])
   const [activeId, setActiveId] = useState(equations[0].id)
   const [graphMode, setGraphMode] = useState('2d')
+  
+  // Track resolved hex colors from CSS tokens
+  const [themeColors, setThemeColors] = useState(['#1a1917', '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed'])
+  
+  useEffect(() => {
+    // Wait for the theme attribute to be applied to the document
+    const timer = setTimeout(() => {
+      const computed = getComputedStyle(document.documentElement)
+      const resolved = CSS_COLOR_VARS.map(v => computed.getPropertyValue(v).trim())
+      setThemeColors(resolved)
+    }, 10)
+    return () => clearTimeout(timer)
+  }, [theme])
   const [riemannRects, setRiemannRects] = useState([])
   // U1: surface Riemann results to parent
   const [_riemannSumResult, setRiemannSumResult] = useState(null)
@@ -302,8 +321,8 @@ export default function App() {
 
   const anyLoading = equations.some(e => e.loading)
   const graphEquations = equations.map(e => ({ id: e.id, expr: e.expr }))
-  // F11: read colors from theme state, not from DOM attribute inline
-  const colors = theme === 'dark' ? EQ_COLORS_DARK : EQ_COLORS
+  // F11: read colors dynamically from CSS tokens
+  const colors = themeColors
 
   return (
     <div className={styles.app}>

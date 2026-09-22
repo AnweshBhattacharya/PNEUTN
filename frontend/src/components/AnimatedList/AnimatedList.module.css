@@ -49,12 +49,12 @@
   padding: var(--sp-2) var(--sp-3);
   background-color: var(--surface-sunken);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-none);
   font-family: var(--font-mono);
   font-size: var(--text-small);
   color: var(--content-primary);
   line-height: 1.5;
-  transition: all var(--duration-fast);
+  transition: background-color var(--duration-fast), border-color var(--duration-fast), padding-left var(--duration-fast);
   cursor: pointer;
 }
 
@@ -68,7 +68,6 @@
   border-color: var(--accent);
   border-left: 4px solid var(--accent);
   padding-left: calc(var(--sp-3) - 3px);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .topGradient {
