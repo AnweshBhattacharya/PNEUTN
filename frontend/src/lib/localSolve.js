@@ -406,6 +406,8 @@ export function localSolve({
         steps,
         _local: true,
       }
+    } else if (operation === 'ode') {
+      return localOde({ ode: ode || expr, rhs, wrt })
     } else {
       const primaryWrt = actualIntSeq?.[actualIntSeq.length - 1]?.wrt || wrt
       const finalBounds = actualIntSeq?.[actualIntSeq.length - 1]?.bounds ?? bounds
@@ -591,3 +593,183 @@ export function localCurl({ components }) {
     _local: true,
   }
 }
+
+/**
+ * Local ODE solver for first-order ODEs: dy/d{wrt} = f({wrt}, y).
+ * Handles separable, direct integration, exponential growth/decay, and produces KaTeX steps and sample points.
+ */
+export function localOde({ ode, rhs, wrt = 'x' }) {
+  const wrtVar = wrt || 'x'
+  let rhsExpr = (rhs || '').trim()
+
+  // If rhs not provided, extract from ode string
+  if (!rhsExpr && ode) {
+    let clean = ode.trim().replace(/^d[yY]\/d[xtXT]\s*=\s*/, '').replace(/^y\s*'*=\s*/, '')
+    const matchMinus = clean.match(/Derivative\(y\([^)]*\),\s*[^)]*\)\s*-\s*\((.*)\)\s*$/)
+    if (matchMinus) {
+      rhsExpr = matchMinus[1].replace(new RegExp(`y\\(${wrtVar}\\)`, 'g'), 'y')
+    } else {
+      rhsExpr = clean
+    }
+  }
+
+  if (!rhsExpr) rhsExpr = 'y'
+
+  const steps = []
+  let solutionLatex = ''
+  let sampleFunc = null
+
+  const hasY = /\by\b/.test(rhsExpr)
+
+  if (!hasY) {
+    // 1. Direct integration: dy/dx = f(x)
+    const { finalExpr, resultLatex } = integralSteps(rhsExpr, wrtVar, null)
+    solutionLatex = `y(${wrtVar}) = ${resultLatex}`
+
+    steps.push({
+      rule: 'identify_ode',
+      before_latex: `\\frac{dy}{d${wrtVar}} = ${toLatex(rhsExpr)}`,
+      after_latex: `\\text{Type: Direct Integration}`,
+      explanation: `Identify the differential equation. The derivative depends only on ${wrtVar}.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'integrate',
+      before_latex: `\\int dy = \\int \\left(${toLatex(rhsExpr)}\\right) d${wrtVar}`,
+      after_latex: solutionLatex,
+      explanation: `Since the right-hand side depends solely on ${wrtVar}, integrate both sides with respect to ${wrtVar}.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'general_solution',
+      before_latex: `\\text{General Solution}`,
+      after_latex: solutionLatex,
+      explanation: `The family of all solutions is ${solutionLatex}, parametrized by arbitrary constant C₁.`,
+      narrated_by: 'fallback_template',
+    })
+
+    const comp = compileExpr(finalExpr)
+    sampleFunc = (xVal) => (comp ? (evalAt(comp, { [wrtVar]: xVal }) ?? 0) : 0)
+
+  } else if (/^([+-]?\d*\.?\d*)\s*\*?\s*y$/.test(rhsExpr.replace(/\s+/g, ''))) {
+    // 2. Exponential dy/dx = k * y
+    const m = rhsExpr.replace(/\s+/g, '').match(/^([+-]?\d*\.?\d*)\*?y$/)
+    let kStr = m ? m[1] : '1'
+    if (kStr === '' || kStr === '+') kStr = '1'
+    if (kStr === '-') kStr = '-1'
+    const kNum = parseFloat(kStr) || 1
+    const kDisplay = kNum === 1 ? '' : kNum === -1 ? '-' : `${kNum}`
+
+    solutionLatex = `y(${wrtVar}) = C_{1} e^{${kDisplay}${wrtVar}}`
+
+    steps.push({
+      rule: 'identify_ode',
+      before_latex: `\\frac{dy}{d${wrtVar}} = ${toLatex(rhsExpr)}`,
+      after_latex: `\\text{Type: Linear / Separable}`,
+      explanation: `The rate of change is proportional to y with rate constant k = ${kNum}.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'separation_of_variables',
+      before_latex: `\\frac{1}{y}\\,dy = ${kDisplay}\\,d${wrtVar}`,
+      after_latex: `\\ln|y| = ${kDisplay}${wrtVar} + C_0`,
+      explanation: `Separate variables: divide by y and multiply by d${wrtVar} to get (1/y) dy = ${kDisplay} d${wrtVar}.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'general_solution',
+      before_latex: `\\text{General Solution}`,
+      after_latex: solutionLatex,
+      explanation: `Exponentiating yields ${solutionLatex}, where C₁ represents the family of solutions.`,
+      narrated_by: 'fallback_template',
+    })
+
+    sampleFunc = (xVal) => Math.exp(kNum * xVal)
+
+  } else if (rhsExpr.replace(/\s+/g, '') === `${wrtVar}*y` || rhsExpr.replace(/\s+/g, '') === `y*${wrtVar}`) {
+    // 3. dy/dx = x * y
+    solutionLatex = `y(${wrtVar}) = C_{1} e^{\\frac{${wrtVar}^{2}}{2}}`
+
+    steps.push({
+      rule: 'identify_ode',
+      before_latex: `\\frac{dy}{d${wrtVar}} = ${wrtVar} \\cdot y`,
+      after_latex: `\\text{Type: Separable}`,
+      explanation: `Separate variables into y terms on the left and ${wrtVar} terms on the right.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'separation_of_variables',
+      before_latex: `\\frac{1}{y}\\,dy = ${wrtVar}\\,d${wrtVar}`,
+      after_latex: `\\ln|y| = \\frac{${wrtVar}^2}{2} + C_0`,
+      explanation: `Integrate both sides: ∫ (1/y) dy = ln|y| and ∫ ${wrtVar} d${wrtVar} = ${wrtVar}²/2.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'general_solution',
+      before_latex: `\\text{General Solution}`,
+      after_latex: solutionLatex,
+      explanation: `Exponentiating both sides yields the general solution ${solutionLatex}.`,
+      narrated_by: 'fallback_template',
+    })
+
+    sampleFunc = (xVal) => Math.exp((xVal * xVal) / 2)
+
+  } else {
+    // 4. General First-Order ODE
+    solutionLatex = `y(${wrtVar}) = \\text{Integral Curve for } \\frac{dy}{d${wrtVar}} = ${toLatex(rhsExpr)}`
+
+    steps.push({
+      rule: 'identify_ode',
+      before_latex: `\\frac{dy}{d${wrtVar}} = ${toLatex(rhsExpr)}`,
+      after_latex: `\\text{Type: First-Order ODE}`,
+      explanation: `Identify first-order differential equation with slope field f(${wrtVar}, y) = ${rhsExpr}.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'solve_method',
+      before_latex: `k_1 = f(x_n, y_n), \\quad k_2 = f(x_n + \\frac{h}{2}, y_n + \\frac{h k_1}{2})`,
+      after_latex: `y_{n+1} = y_n + \\frac{h}{6}(k_1 + 2k_2 + 2k_3 + k_4)`,
+      explanation: `Apply the 4th-order Runge-Kutta (RK4) method to trace integral trajectory curves across the direction field.`,
+      narrated_by: 'fallback_template',
+    })
+    steps.push({
+      rule: 'general_solution',
+      before_latex: `\\text{Trajectory}`,
+      after_latex: `y(${wrtVar}) = \\int f(${wrtVar}, y)\\,d${wrtVar} + C_1`,
+      explanation: `The solution curve represents the integral manifold in the direction field.`,
+      narrated_by: 'fallback_template',
+    })
+
+    const comp = compileExpr(rhsExpr)
+    sampleFunc = (xVal) => {
+      if (!comp) return 1
+      try {
+        const v = evalAt(comp, { [wrtVar]: xVal, y: 1 })
+        return isFinite(v) ? v : 1
+      } catch {
+        return 1
+      }
+    }
+  }
+
+  // Generate numeric samples at [-3, -2, -1, 0, 1, 2, 3]
+  const xs = [-3, -2, -1, 0, 1, 2, 3]
+  const numericSample = []
+  for (const xv of xs) {
+    try {
+      const yVal = sampleFunc ? sampleFunc(xv) : 0
+      if (isFinite(yVal) && Math.abs(yVal) < 1e9) {
+        numericSample.push({ [wrtVar]: xv, y: parseFloat(yVal.toFixed(4)) })
+      }
+    } catch {}
+  }
+
+  return {
+    result_latex: solutionLatex,
+    steps,
+    result_numeric_sample: numericSample,
+    operation_type: 'ode',
+    _local: true,
+  }
+}
+

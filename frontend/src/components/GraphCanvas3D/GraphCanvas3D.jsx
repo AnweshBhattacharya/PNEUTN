@@ -966,7 +966,9 @@ export default function GraphCanvas3D({
         // Math coordinates: (wx, wy), height z
         // Three.js coordinates: X = wx, Y = z, Z = wy
         // Tangent vector along steepest ascent: (fx, m * 0.8, fy)
-        const dir = new THREE.Vector3(s.fx, s.m * 0.8, s.fy).normalize()
+        const dir = new THREE.Vector3(s.fx, s.m * 0.8, s.fy)
+        if (dir.lengthSq() < 1e-12) return  // skip near-zero vectors — normalize() → NaN
+        dir.normalize()
         const norm = Math.min(Math.sqrt(s.m) / Math.sqrt(maxM || 1), 1)
         const len = 0.35 + norm * 0.95
         const clr = heightColor(norm)
@@ -1021,7 +1023,9 @@ export default function GraphCanvas3D({
         if (arrowIdx >= pool.length) return
         const arrow = pool[arrowIdx++]
         // Three.js coords: X = wx, Y = wz (up), Z = wy
-        const dir = new THREE.Vector3(s.vx, s.vz, s.vy).normalize()
+        const dir = new THREE.Vector3(s.vx, s.vz, s.vy)
+        if (dir.lengthSq() < 1e-12) return  // skip near-zero vectors — normalize() → NaN
+        dir.normalize()
         const norm = Math.min(Math.sqrt(s.m) / Math.sqrt(maxM || 1), 1)
         const len = 0.35 + norm * 0.9
         const clr = heightColor(norm)

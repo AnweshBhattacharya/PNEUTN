@@ -26,7 +26,7 @@ from sympy import (
     Rational, Integer,
 )
 
-from safe_parse import safe_parse, ExpressionError
+from safe_parse import safe_parse, safe_parse_ode, ExpressionError
 from computation_guard import ComputationTimeout, calculation_timeout
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ _NARRATION = {
     "gradient_component":   "Partial derivative of the scalar field with respect to {wrt} — treating all other variables as constants.",
     "divergence_sum":       "Divergence: sum the partial derivative of each component with respect to its own variable — ∂P/∂x + ∂Q/∂y + ∂R/∂z.",
     "curl_component":       "Curl component: subtract the cross-partial derivatives — the signed difference of the two off-axis partials.",
+    "simplify":             "Simplify the expression by combining like terms or applying algebraic identities.",
 }
 
 def _narrate(rule: str, wrt: str = "x") -> str:
@@ -106,35 +107,35 @@ def _available_narration_models(client) -> list[str]:
 def _gemini_narrate(
     steps: list[dict], wrt: str, narration: dict | None = None
 ) -> list[dict]:
-    """Narrate verified SymPy steps with Gemini, or use deterministic text."""
+    """Narrate verified SymPy steps with Gemini, returning enriched steps + summary."""
     narration = narration if narration is not None else {}
     narration.update({"provider": "gemini", "model": GEMINI_MODEL})
     if not GEMINI_API_KEY:
         narration["status"] = "not_configured"
         return _fallback_narrate(steps, wrt)
     try:
-        # google-generativeai and gemini-2.0-flash are both retired.  Use the
-        # supported Google Gen AI SDK and a stable model instead.  The key is
-        # supplied only from Lambda's environment; it is never logged or sent
-        # to the browser.
         from google import genai
         from google.genai import types
         client = genai.Client(
             api_key=GEMINI_API_KEY,
-            # A plain mapping keeps this compatible across supported
-            # google-genai 1.x releases while bounding a public request.
             http_options={"timeout": GEMINI_REQUEST_TIMEOUT_MS},
         )
 
         lines = [
-            f"Step {i+1}: Rule={s['rule']}. Before={s['before_latex']}. After={s['after_latex']}."
+            f"Step {i+1}: Rule={s['rule']}. Input={s['before_latex']}. Output={s['after_latex']}."
             for i, s in enumerate(steps)
         ]
         prompt = (
-            "You are a calculus tutor. The following steps were computed CORRECTLY by SymPy. "
-            "Do NOT change any math. For each step write one clear sentence explaining "
-            "what transformation was applied and why, for an undergraduate student. "
-            "Return only a JSON array of strings, one sentence per input step, in the same order.\n\n"
+            "You are a calculus tutor. The following steps were computed CORRECTLY by SymPy — "
+            "do NOT change any math or LaTeX. Your job is ONLY to explain what happened in plain English.\n\n"
+            "For each step, write 1-2 clear sentences explaining:\n"
+            "  1. Which rule or technique was applied\n"
+            "  2. WHY this step was taken (not just what it does)\n\n"
+            "Also write a brief overall 'summary' (1-2 sentences) describing what the whole computation achieved, "
+            "suitable for an undergraduate student who just solved this problem.\n\n"
+            "Return ONLY valid JSON with this exact schema (no markdown, no code fences):\n"
+            '{"summary": "...", "steps": ["explanation for step 1", "explanation for step 2", ...]}\n\n'
+            "Steps to narrate:\n"
             + "\n".join(lines)
         )
         response = None
@@ -157,7 +158,7 @@ def _gemini_narrate(
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
-                        max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                        max_output_tokens=800,
                         temperature=0,
                     ),
                 )
@@ -173,12 +174,27 @@ def _gemini_narrate(
         if response is None:
             narration["models_tried"] = attempted_models
             raise model_not_found_error or RuntimeError("No compatible Gemini narration model found.")
-        narrations = json.loads(response.text or "")
+
+        parsed = json.loads(response.text or "{}")
+        if isinstance(parsed, list):
+            narrations = parsed
+            summary = ""
+        elif isinstance(parsed, dict):
+            # Extract summary
+            summary = parsed.get("summary", "")
+            if isinstance(summary, str) and summary.strip():
+                narration["summary"] = summary.strip()
+            # Extract per-step narrations
+            narrations = parsed.get("steps", [])
+        else:
+            raise ValueError("Gemini returned unexpected JSON structure.")
+
         if (
             not isinstance(narrations, list)
-            or not all(isinstance(narration, str) and narration.strip() for narration in narrations)
+            or not all(isinstance(n, str) and n.strip() for n in narrations)
         ):
-            raise ValueError("Gemini did not return a JSON array of non-empty narration strings.")
+            raise ValueError("Gemini did not return a valid 'steps' array of non-empty strings.")
+
         for i, step in enumerate(steps):
             step["explanation"]  = narrations[i] if i < len(narrations) else _narrate(step["rule"], wrt)
             step["narrated_by"]  = "gemini" if i < len(narrations) else "fallback_template"
@@ -186,9 +202,6 @@ def _gemini_narrate(
         logger.info("Gemini narrated %d verified SymPy steps with %s.", len(steps), selected_model)
         return steps
     except Exception as exc:
-        # This deliberately excludes exception text: provider messages can
-        # include request metadata, while the exception class is enough for
-        # safe production diagnosis from the client response.
         narration.update({"status": "error", "error_type": type(exc).__name__})
         error_code = getattr(exc, "code", None)
         error_status = getattr(exc, "status", None)
@@ -623,7 +636,7 @@ def _vec_safe_parse(expr_str: str):
 def _gradient_steps(expr_str: str, wrt_vars: list) -> dict:
     """
     Compute gradient of a scalar field f(x,y,z).
-    Returns {result_latex, components, steps}.
+    Returns {result_latex, components, steps, operation_type}.
     """
     f = _vec_safe_parse(expr_str)
     sym_vars = [symbols(v) for v in wrt_vars]
@@ -638,17 +651,25 @@ def _gradient_steps(expr_str: str, wrt_vars: list) -> dict:
         after  = latex(result)
         col_rows.append(after)
         components.append({"var": v_str, "latex": after})
+        explanation_text = _NARRATION["gradient_component"].replace("{wrt}", v_str)
         steps.append({
             "rule": "gradient_component",
             "before_latex": before,
             "after_latex": after,
-            "narration": _NARRATION["gradient_component"].replace("{wrt}", v_str),
-            "narrated_by": "template",
+            "explanation": explanation_text,
+            "narration": explanation_text,
+            "narrated_by": "fallback_template",
         })
 
     # Column vector LaTeX
     rows_latex = " \\\\ ".join(col_rows)
     result_latex = f"\\begin{{pmatrix}} {rows_latex} \\end{{pmatrix}}"
+
+    narration = {}
+    try:
+        steps = _gemini_narrate(steps, wrt_vars[0] if wrt_vars else "x", narration)
+    except Exception:
+        pass
 
     return {
         "statusCode": 200,
@@ -657,9 +678,10 @@ def _gradient_steps(expr_str: str, wrt_vars: list) -> dict:
             "result_latex": result_latex,
             "components": components,
             "result_numeric_sample": [],
-            "narration": {},
+            "narration": narration,
             "steps": steps,
             "operation_type": "gradient",
+            "summary": narration.get("summary", ""),
         }),
     }
 
@@ -709,8 +731,9 @@ def _divergence_steps(components: list) -> dict:
             "rule": "divergence_sum",
             "before_latex": before,
             "after_latex": after,
+            "explanation": _NARRATION["divergence_sum"],
             "narration": _NARRATION["divergence_sum"],
-            "narrated_by": "template",
+            "narrated_by": "fallback_template",
         })
 
     result_latex = latex(sympy.simplify(total))
@@ -718,9 +741,16 @@ def _divergence_steps(components: list) -> dict:
         "rule": "simplify",
         "before_latex": " + ".join(term_latexes),
         "after_latex": result_latex,
+        "explanation": _NARRATION["simplify"],
         "narration": _NARRATION["simplify"],
-        "narrated_by": "template",
+        "narrated_by": "fallback_template",
     })
+
+    narration = {}
+    try:
+        steps = _gemini_narrate(steps, "x", narration)
+    except Exception:
+        pass
 
     return {
         "statusCode": 200,
@@ -729,9 +759,10 @@ def _divergence_steps(components: list) -> dict:
             "result_latex": result_latex,
             "components": [],
             "result_numeric_sample": [],
-            "narration": {},
+            "narration": narration,
             "steps": steps,
             "operation_type": "divergence",
+            "summary": narration.get("summary", ""),
         }),
     }
 
@@ -767,12 +798,19 @@ def _curl_steps(components: list) -> dict:
             "rule": "curl_component",
             "before_latex": before,
             "after_latex": after,
+            "explanation": _NARRATION["curl_component"],
             "narration": _NARRATION["curl_component"],
-            "narrated_by": "template",
+            "narrated_by": "fallback_template",
         })
 
     rows_latex = " \\\\ ".join(col_rows)
     result_latex = f"\\begin{{pmatrix}} {rows_latex} \\end{{pmatrix}}"
+
+    narration = {}
+    try:
+        steps = _gemini_narrate(steps, "x", narration)
+    except Exception:
+        pass
 
     return {
         "statusCode": 200,
@@ -781,42 +819,144 @@ def _curl_steps(components: list) -> dict:
             "result_latex": result_latex,
             "components": result_components,
             "result_numeric_sample": [],
-            "narration": {},
+            "narration": narration,
             "steps": steps,
             "operation_type": "curl",
+            "summary": narration.get("summary", ""),
         }),
     }
 
 # ── New endpoint handlers ────────────────────────────────────────────────────────
 
+def _resp(status: int, body: dict) -> dict:
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(body),
+    }
+
+
+def _classify_ode(ode_expr, y_func) -> str:
+    """Classify an ODE expression using SymPy's classify_ode."""
+    try:
+        classes = sympy.classify_ode(ode_expr, y_func)
+        if classes:
+            return classes[0]
+    except Exception:
+        pass
+    expr_str = str(ode_expr)
+    if 'Derivative' not in expr_str:
+        return 'algebraic'
+    for n in range(1, 6):
+        if f', {n})' in expr_str or f',{n})' in expr_str:
+            return f'order_{n}'
+    return 'first_order_ode'
+
+
 def handle_ode(body: dict) -> dict:
     """Handle ODE solving requests.
     Expected body keys:
-      - ``ode``: ODE expression string (e.g., ``"Derivative(y(x), x) - x*y(x)"``)
-    Returns a JSON response compatible with the existing API contract.
+      - ``ode`` or ``expr``: ODE expression string (e.g., ``"Derivative(y(x), x) - x*y(x)"`` or ``"x*y"``)
+      - ``wrt``: optional independent variable ('x' or 't', defaults to 'x')
+    Returns a JSON response with steps, result_latex, and numeric sample points.
     """
-    ode_str = body.get('ode')
+    ode_str = body.get('ode') or body.get('expr')
     if not isinstance(ode_str, str) or not ode_str.strip():
         return _resp(400, {"error": "invalid_request", "message": "Missing or invalid 'ode' field."})
+
+    wrt_name = body.get('wrt', 'x')
+    if wrt_name not in {'x', 't'}:
+        wrt_name = 'x'
+
     # Safe parsing of the ODE string
     try:
-        ode_expr = safe_parse(ode_str)
+        ode_expr, y_func, wrt_sym = safe_parse_ode(ode_str, wrt_name)
     except ExpressionError as e:
         return _resp(400, {"error": "parse_error", "message": str(e)})
+
     # Solve the ODE using SymPy's dsolve
     try:
-        solution = sympy.dsolve(ode_expr)
+        with calculation_timeout(15):
+            solution = sympy.dsolve(ode_expr, y_func)
+    except ComputationTimeout:
+        return _resp(504, {"error": "computation_timeout", "message": "ODE computation timed out."})
     except Exception as exc:
-        return _resp(400, {"error": "solve_error", "message": str(exc)})
-    result_latex = latex(solution)
-    # Minimal response – no granular steps for ODE yet
+        return _resp(400, {"error": "solve_error", "message": f"Could not solve ODE: {type(exc).__name__}."})
+
+    result_latex_str = latex(solution)
+
+    # Classify ODE and determine method
+    ode_class = _classify_ode(ode_expr, y_func)
+    clean_class = ode_class.replace('_', ' ').title()
+
+    method_name = "Separation of Variables" if "separable" in ode_class.lower() else \
+                  "Integrating Factor" if "linear" in ode_class.lower() else \
+                  "Exact Differential Method" if "exact" in ode_class.lower() else "Analytic ODE Solver"
+
+    method_explanation = (
+        f"Apply {method_name}. The differential equation is identified as a {clean_class.lower()}. "
+        f"Integrating with respect to {wrt_name} yields the general solution."
+    )
+
+    steps = [
+        {
+            "rule": "identify_ode",
+            "before_latex": f"\\text{{ODE: }} {latex(ode_expr)} = 0",
+            "after_latex": f"\\text{{Type: {clean_class}}}",
+            "explanation": f"Identify the ODE. This equation is classified as {clean_class.lower()} with respect to {wrt_name}.",
+            "narration": f"Identify the ODE. This equation is classified as {clean_class.lower()} with respect to {wrt_name}.",
+            "narrated_by": "fallback_template",
+        },
+        {
+            "rule": "solve_method",
+            "before_latex": f"\\text{{Method: }} {method_name}",
+            "after_latex": result_latex_str,
+            "explanation": method_explanation,
+            "narration": method_explanation,
+            "narrated_by": "fallback_template",
+        },
+        {
+            "rule": "general_solution",
+            "before_latex": f"\\text{{General Solution}}",
+            "after_latex": result_latex_str,
+            "explanation": (
+                f"The general solution is {result_latex_str}. "
+                "The constant C\u2081 parametrizes the family of all solution trajectories."
+            ),
+            "narration": (
+                f"The general solution is {result_latex_str}. "
+                "The constant C\u2081 parametrizes the family of all solution trajectories."
+            ),
+            "narrated_by": "fallback_template",
+        },
+    ]
+
+    # Attempt numeric sampling for C1 = 1
+    samples = []
+    try:
+        rhs_sol = solution.rhs if hasattr(solution, "rhs") else None
+        if rhs_sol is not None:
+            c1_sym = sympy.Symbol("C1")
+            rhs_sample = rhs_sol.subs(c1_sym, 1) if rhs_sol.has(c1_sym) else rhs_sol
+            samples = _numeric_sample(rhs_sample, wrt_sym, n=7, wrt_name=wrt_name)
+    except Exception:
+        samples = []
+
+    narration = {}
+    try:
+        steps = _gemini_narrate(steps, wrt_name, narration)
+    except Exception:
+        pass
+
     return _resp(200, {
-        "result_latex": result_latex,
-        "steps": [],
+        "result_latex": result_latex_str,
+        "steps": steps,
         "operation_type": "ode",
-        "narration": {},
-        "result_numeric_sample": [],
+        "narration": narration,
+        "result_numeric_sample": samples,
+        "summary": narration.get("summary", ""),
     })
+
 
 def handle_vector(body: dict) -> dict:
     """Dispatch vector‑calculus operations (gradient, divergence, curl).
@@ -830,7 +970,7 @@ def handle_vector(body: dict) -> dict:
     if operation == 'gradient':
         expr = body.get('expr')
         wrt = body.get('wrt', ['x', 'y', 'z'])
-        if not isinstance(expr, str):
+        if not isinstance(expr, str) or not expr.strip():
             return _resp(400, {"error": "invalid_request", "message": "Missing scalar field expression for gradient."})
         if not isinstance(wrt, list) or not all(isinstance(v, str) for v in wrt):
             return _resp(400, {"error": "invalid_request", "message": "'wrt' must be a list of variable names."})
@@ -893,26 +1033,31 @@ def _error(code: str, message: str, status: int = 422) -> dict:
 def handle(body: dict) -> dict:
     """
     POST /solve
-      expr                 string  required
-      operation            string  required  "derivative" | "integral"
+      expr                 string  required (except divergence, curl, ode)
+      operation            string  required  "derivative" | "integral" | "total_derivative" | "gradient" | "divergence" | "curl" | "ode"
       wrt_sequence         list    optional  e.g. ["x", "y"]
       integration_sequence list    optional  e.g. [{"wrt": "x", "bounds": [0, 1]}]
     """
-    expr_str  = body.get("expr", "")
     operation = body.get("operation", "")
+    ode_input = body.get("ode")
 
-    if not expr_str:
-        return _error("malformed_request", "Field 'expr' is required.", 400)
+    # Direct dispatch to handle_ode if operation is ode or 'ode' is in body
+    if operation == "ode" or (ode_input and operation not in ("derivative", "integral", "total_derivative")):
+        return handle_ode(body)
+
     VECTOR_OPS = ("gradient", "divergence", "curl")
-    if operation not in ("derivative", "integral", "total_derivative") + VECTOR_OPS:
+    if operation not in ("derivative", "integral", "total_derivative", "ode") + VECTOR_OPS:
         return _error(
             "malformed_request",
-            "'operation' must be 'derivative', 'integral', 'total_derivative', 'gradient', 'divergence', or 'curl'.",
+            "'operation' must be 'derivative', 'integral', 'total_derivative', 'gradient', 'divergence', 'curl', or 'ode'.",
             400,
         )
 
     # ── Vector calculus dispatch (bypasses safe_parse of expr for div/curl) ─
     if operation == "gradient":
+        expr_str = body.get("expr", "")
+        if not expr_str:
+            return _error("malformed_request", "Field 'expr' is required for gradient.", 400)
         wrt_vars_raw = body.get("wrt_vars", ["x", "y", "z"])
         if not isinstance(wrt_vars_raw, list) or not all(
             isinstance(v, str) and v in _ALLOWED_GRAD_VARS for v in wrt_vars_raw
@@ -968,6 +1113,10 @@ def handle(body: dict) -> dict:
         except Exception:
             logger.exception("Curl computation failure.")
             return _error("internal_error", "Could not compute the curl.", 500)
+
+    expr_str = body.get("expr", "")
+    if not expr_str:
+        return _error("malformed_request", "Field 'expr' is required.", 400)
 
     try:
         expr = safe_parse(expr_str)

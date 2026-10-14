@@ -74,6 +74,16 @@ Resources:
           Properties:
             Path: /integral-order
             Method: post
+        Ode:
+          Type: HttpApi
+          Properties:
+            Path: /ode
+            Method: post
+        Vector:
+          Type: HttpApi
+          Properties:
+            Path: /vector
+            Method: post
         SolveOptions:
           Type: HttpApi
           Properties:
@@ -88,6 +98,16 @@ Resources:
           Type: HttpApi
           Properties:
             Path: /integral-order
+            Method: options
+        OdeOptions:
+          Type: HttpApi
+          Properties:
+            Path: /ode
+            Method: options
+        VectorOptions:
+          Type: HttpApi
+          Properties:
+            Path: /vector
             Method: options
 
 Outputs:

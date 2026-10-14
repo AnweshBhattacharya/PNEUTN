@@ -2,8 +2,6 @@ import React, { useState, useCallback, useEffect } from 'react'
 import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
-import SliderSidebar from './components/SliderSidebar/SliderSidebar'
-import ParameterDisplay from './components/ParameterDisplay/ParameterDisplay'
 import { detectFreeParams } from './lib/freeParams'
 import StepPanel from './components/StepPanel/StepPanel'
 import RiemannControls from './components/RiemannControls/RiemannControls'
@@ -26,11 +24,13 @@ const EXAMPLE_EXPRS = [
   { label: 'eˣ cos x', expr: 'exp(x)*cos(x)', wrt: 'x', operation: 'derivative' },
   { label: '∫ x² [0,3]', expr: 'x^2', wrt: 'x', operation: 'integral', bounds: [0, 3] },
   { label: 'x²y³ ∂/∂x', expr: 'x^2*y^3', wrt: 'x', operation: 'derivative' },
+  { label: '∇(x²+y²)', expr: 'x^2+y^2', wrt: 'x', operation: 'gradient' },
+  { label: 'dy/dx = xy', expr: 'x*y', wrt: 'x', operation: 'ode' },
 ]
 
 let _nextId = 1
 function makeEq(expr = '') {
-  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [] }
+  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [], operationType: null, components: [] }
 }
 
 function SunIcon() {
@@ -121,9 +121,6 @@ export default function App() {
   // { rhs: string, wrt: string } — for plotting the slope field
   const [odeVisConfig, setOdeVisConfig] = useState(null)
 
-  // Viewport range sliders (SliderSidebar → GraphCanvas2D)
-  const [xRange, setXRange] = useState([-10, 10])
-  const [yRange, setYRange] = useState([-10, 10])
 
   // 3D Riemann bars
   const [showRiemannBars3D, setShowRiemannBars3D] = useState(false)
@@ -141,10 +138,6 @@ export default function App() {
   const [showVolumeRev, setShowVolumeRev] = useState(false)
   const [markedX, setMarkedX] = useState(null)
   const [markedXInput, setMarkedXInput] = useState('')
-  const [xRangeMin, setXRangeMin] = useState(null)
-  const [xRangeMax, setXRangeMax] = useState(null)
-  const [xRangeMinInput, setXRangeMinInput] = useState('-6')
-  const [xRangeMaxInput, setXRangeMaxInput] = useState('6')
 
   // 3D graph parameter & limit controls (U3: fully restored)
   const [xMin3D, setXMin3D] = useState(-4)
@@ -276,6 +269,7 @@ export default function App() {
         isLocal: !!data._local,
         numericSample: data.result_numeric_sample ?? [],
         operationType: data.operation_type ?? params.operation ?? 'derivative',
+        components: data.components ?? [],
       })
     } catch (e) {
       updateEquation(id, { loading: false, error: e.message || 'An error occurred.' })
@@ -490,6 +484,8 @@ export default function App() {
                 loading={activeEq.loading}
                 error={activeEq.error}
                 isLocal={activeEq.isLocal}
+                operationType={activeEq.operationType}
+                components={activeEq.components}
               />
             </div>
           </div>
@@ -553,40 +549,6 @@ export default function App() {
                 </div>
 
                 {/* Graph Controls moved to ⚙ dropdown on the graph toolbar */}
-
-                {/* X-range inputs — always visible */}
-                <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>X range</span>
-                  <div style={{ padding: '4px', display: 'flex', gap: 4, alignItems: 'center' }}>
-                    <input
-                      type="number"
-                      className={styles.curveExprInput}
-                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
-                      value={xRangeMinInput}
-                      onChange={e => {
-                        setXRangeMinInput(e.target.value)
-                        const v = parseFloat(e.target.value)
-                        setXRangeMin(isFinite(v) ? v : null)
-                      }}
-                      placeholder="−6"
-                      aria-label="X minimum"
-                    />
-                    <span className={styles.areaLabel}>to</span>
-                    <input
-                      type="number"
-                      className={styles.curveExprInput}
-                      style={{ border: '1px solid var(--border-color)', padding: '2px 4px', width: 52 }}
-                      value={xRangeMaxInput}
-                      onChange={e => {
-                        setXRangeMaxInput(e.target.value)
-                        const v = parseFloat(e.target.value)
-                        setXRangeMax(isFinite(v) ? v : null)
-                      }}
-                      placeholder="6"
-                      aria-label="X maximum"
-                    />
-                  </div>
-                </div>
 
                 {/* Mark point x = a */}
                 <div className={styles.curveListSection}>
@@ -661,21 +623,61 @@ export default function App() {
             {/* ── Left sidebar: 3D controls & limit settings (U3: fully restored) ── */}
             {graphMode === '3d' && (
               <aside className={styles.graphSidebar}>
-                {/* 3D Equation */}
+                {/* 3D Equation — adapts to scalar / vector / ODE mode */}
                 <div className={styles.curveListSection}>
-                  <span className={styles.sidebarSectionLabel}>Surface Function</span>
-                  <div className={`${styles.curveRow} ${styles.curveRowActive}`}>
-                    <span className={styles.curveSwatch} style={{ background: '#2563eb' }} />
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)', marginRight: 2 }}>z =</span>
-                    <input
-                      className={styles.curveExprInput}
-                      value={activeEq.expr}
-                      onChange={e => updateExpr(activeEq.id, e.target.value)}
-                      placeholder="e.g. sin(x) * cos(y)"
-                      aria-label="3D surface expression z = f(x, y)"
-                      spellCheck={false}
-                    />
-                  </div>
+                  {operationMode === 'vector_gradient' && vectorVisConfig ? (
+                    <>
+                      <span className={styles.sidebarSectionLabel}>Gradient Field ∇f</span>
+                      <div className={`${styles.curveRow} ${styles.curveRowActive}`}>
+                        <span className={styles.curveSwatch} style={{ background: '#2563eb' }} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)', marginRight: 2 }}>f =</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-primary)' }}>{vectorVisConfig.expr ?? activeEq.expr}</span>
+                      </div>
+                      <div style={{ padding: '4px 6px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--content-secondary)', lineHeight: 1.5 }}>
+                        wrt: [{(vectorVisConfig.wrt_vars ?? ['x', 'y', 'z']).join(', ')}] · showing 3D gradient arrows on surface manifold
+                      </div>
+                    </>
+                  ) : operationMode === 'vector_divergence' || operationMode === 'vector_curl' ? (
+                    <>
+                      <span className={styles.sidebarSectionLabel}>
+                        {operationMode === 'vector_divergence' ? 'Divergence Field ∇·F' : 'Curl Field ∇×F'}
+                      </span>
+                      <div style={{ padding: '4px 6px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--content-secondary)', lineHeight: 1.6 }}>
+                        {vectorVisConfig?.components?.map(c => `${c.var.toUpperCase()}(x,y,z) = ${c.expr}`).join(' · ')}
+                      </div>
+                      <div style={{ padding: '2px 6px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--content-tertiary, var(--content-secondary))' }}>
+                        3D vector arrows shown at grid points
+                      </div>
+                    </>
+                  ) : operationMode === 'ode' && odeVisConfig ? (
+                    <>
+                      <span className={styles.sidebarSectionLabel}>ODE Direction Field</span>
+                      <div className={`${styles.curveRow} ${styles.curveRowActive}`}>
+                        <span className={styles.curveSwatch} style={{ background: '#06b6d4' }} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)', marginRight: 2 }}>dy/d{odeVisConfig.wrt ?? 'x'} =</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-primary)' }}>{odeVisConfig.rhs}</span>
+                      </div>
+                      <div style={{ padding: '4px 6px', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--content-secondary)', lineHeight: 1.5 }}>
+                        manifold z = f(x,y) · 7 RK4 integral curves
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <span className={styles.sidebarSectionLabel}>Surface Function</span>
+                      <div className={`${styles.curveRow} ${styles.curveRowActive}`}>
+                        <span className={styles.curveSwatch} style={{ background: '#2563eb' }} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)', marginRight: 2 }}>z =</span>
+                        <input
+                          className={styles.curveExprInput}
+                          value={activeEq.expr}
+                          onChange={e => updateExpr(activeEq.id, e.target.value)}
+                          placeholder="e.g. sin(x) * cos(y)"
+                          aria-label="3D surface expression z = f(x, y)"
+                          spellCheck={false}
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 3D Graph Controls */}
@@ -886,18 +888,6 @@ export default function App() {
               </aside>
             )}
 
-            {/* ── SliderSidebar: free-param sliders only (no viewport — pinch/scroll handles that) ── */}
-            {graphMode === '2d' && Object.keys(paramValues).length > 0 && (
-              <SliderSidebar
-                xRange={xRange}
-                yRange={yRange}
-                onXRangeChange={setXRange}
-                onYRangeChange={setYRange}
-                freeParams={Object.entries(paramValues).map(([name, value]) => ({ name, value }))}
-                onParamChange={(name, value) => setParamValues(prev => ({ ...prev, [name]: value }))}
-              />
-            )}
-
             {/* ── Main graph canvas ── */}
             <div className={styles.graphMain} style={{ position: 'relative' }}>
               <div style={{ display: graphMode === '2d' ? 'contents' : 'none' }}>
@@ -912,12 +902,8 @@ export default function App() {
                   showDerivative={showDerivative}
                   showGrid={showGrid}
                   markedX={markedX}
-                  xRangeMin={xRangeMin}
-                  xRangeMax={xRangeMax}
                   areaValue={areaValue}
                   onAreaValue={setAreaValue}
-                  xRange={xRange}
-                  yRange={yRange}
                   extraVars={paramValues}
                   onShowAreaChange={setShowArea}
                   onShowTangentChange={setShowTangent}

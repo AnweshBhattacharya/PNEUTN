@@ -155,3 +155,88 @@ def safe_parse(expr_string: str) -> sympy.Expr:
             )
 
     return parsed
+
+
+# ── ODE Safe Parser ──────────────────────────────────────────────────────────
+
+ALLOWED_ODE_SYMBOLS = {"x", "y", "z", "t", "C1", "C2"}
+ALLOWED_ODE_FUNCTIONS = ALLOWED_FUNCTIONS | {"Derivative", "diff", "y", "Eq"}
+_SAFE_ODE_CHAR_RE = re.compile(r"^[0-9a-zA-Z\s\+\-\*/\^\(\)\.,=']+$")
+
+_SAFE_ODE_GLOBAL_DICT = dict(_SAFE_GLOBAL_DICT)
+_SAFE_ODE_GLOBAL_DICT.update({
+    "Derivative": sympy.Derivative,
+    "diff": sympy.Derivative,
+    "Function": sympy.Function,
+    "Eq": sympy.Eq,
+    "y": sympy.Function("y"),
+})
+
+
+def safe_parse_ode(ode_string: str, wrt_name: str = "x") -> tuple[sympy.Expr, sympy.Function, sympy.Symbol]:
+    """
+    Safely parse an ordinary differential equation string.
+    Supports:
+      - SymPy form: "Derivative(y(x), x) - x*y(x)"
+      - Equation form: "dy/dx = x*y" or "y' = -2*y" or "Derivative(y(x), x) = x*y(x)"
+      - Plain RHS form: "x*y" (interpreted as dy/d{wrt} = f({wrt}, y))
+    Returns (ode_expr, y_func, wrt_symbol).
+    """
+    if not isinstance(ode_string, str) or not ode_string.strip():
+        raise ExpressionError("ODE expression must be a non-empty string.")
+
+    wrt_str = wrt_name if wrt_name in {"x", "t"} else "x"
+    wrt_sym = Symbol(wrt_str)
+    y_func = sympy.Function("y")(wrt_sym)
+
+    s = ode_string.strip().replace("’", "'")
+    if len(s) > MAX_EXPRESSION_LENGTH:
+        raise ExpressionError(f"Expression too long (max {MAX_EXPRESSION_LENGTH} characters).")
+
+    if not _SAFE_ODE_CHAR_RE.match(s):
+        raise ExpressionError("ODE expression contains disallowed characters.")
+
+    # Strip leading derivative notation like "dy/dx =" or "y' =" or "dy/dt ="
+    s = re.sub(r"^(?:d[yY]/d[xtXT]|y\s*'*)\s*=\s*", "", s).strip()
+
+    # If it contains an equals sign '=' outside of functions, rewrite as (lhs) - (rhs)
+    if "=" in s and not s.startswith("Eq("):
+        parts = s.split("=", 1)
+        lhs_part = parts[0].strip()
+        rhs_part = parts[1].strip()
+        s = f"({lhs_part}) - ({rhs_part})"
+
+    # If no derivative operator is present, assume s is the RHS f(wrt, y) of dy/d{wrt} = f
+    if "Derivative" not in s and "diff" not in s:
+        # replace standalone y with y(wrt)
+        rhs_with_y = re.sub(r"\by\b", f"y({wrt_str})", s)
+        s = f"Derivative(y({wrt_str}), {wrt_str}) - ({rhs_with_y})"
+    else:
+        # Ensure y is invoked as a function y(wrt)
+        # Match standalone 'y' not followed by '(' and not part of 'dy'
+        s = re.sub(r"(?<![a-zA-Z])y(?!\s*\()", f"y({wrt_str})", s)
+
+    try:
+        parsed = parse_expr(
+            s,
+            transformations=_TRANSFORMATIONS,
+            local_dict={wrt_str: wrt_sym, "y": sympy.Function("y")},
+            global_dict=_SAFE_ODE_GLOBAL_DICT,
+            evaluate=True,
+        )
+    except Exception as exc:
+        raise ExpressionError("Could not parse ODE expression. Check its syntax.") from exc
+
+    _validate_expression_complexity(parsed)
+
+    for sym in parsed.free_symbols:
+        if str(sym) not in ALLOWED_ODE_SYMBOLS:
+            raise ExpressionError(f"Disallowed variable '{sym}' in ODE.")
+
+    for func in parsed.atoms(sympy.Function):
+        fname = type(func).__name__
+        if fname not in ALLOWED_ODE_FUNCTIONS:
+            raise ExpressionError(f"Disallowed function '{fname}' in ODE.")
+
+    return parsed, y_func, wrt_sym
+

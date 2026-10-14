@@ -2,51 +2,6 @@ import React from 'react'
 import styles from './SliderSidebar.module.css'
 
 /**
- * DualRangeSlider — two overlapping <input type="range"> elements sharing one track.
- * value = [lo, hi]; onChange receives [lo, hi].
- */
-function DualRangeSlider({ label, min = -20, max = 20, value, onChange, step = 0.5 }) {
-  const lo = value[0]
-  const hi = value[1]
-  const range = max - min
-
-  return (
-    <div className={styles.dualSlider}>
-      <span className={styles.sliderLabel}>{label}</span>
-      <div className={styles.trackWrap}>
-        <input
-          type="range"
-          min={min} max={max} step={step}
-          value={lo}
-          onChange={e => onChange([Math.min(Number(e.target.value), hi - step), hi])}
-          className={styles.rangeThumbLo}
-          aria-label={`${label} minimum`}
-        />
-        <input
-          type="range"
-          min={min} max={max} step={step}
-          value={hi}
-          onChange={e => onChange([lo, Math.max(Number(e.target.value), lo + step)])}
-          className={styles.rangeThumbHi}
-          aria-label={`${label} maximum`}
-        />
-        <div
-          className={styles.trackFill}
-          style={{
-            '--lo': range > 0 ? Math.max(0, Math.min(1, (lo - min) / range)) : 0,
-            '--hi': range > 0 ? Math.max(0, Math.min(1, (hi - min) / range)) : 1,
-          }}
-        />
-      </div>
-      <div className={styles.rangeValues}>
-        <span>{Number.isInteger(lo) ? lo : Number(lo).toFixed(1)}</span>
-        <span>{Number.isInteger(hi) ? hi : Number(hi).toFixed(1)}</span>
-      </div>
-    </div>
-  )
-}
-
-/**
  * ParameterSlider — single-handle slider for a detected free parameter.
  */
 function ParameterSlider({ name, value, min = -5, max = 5, onChange }) {
@@ -69,55 +24,30 @@ function ParameterSlider({ name, value, min = -5, max = 5, onChange }) {
 }
 
 /**
- * SliderSidebar — controlled component. All values live in App state.
+ * SliderSidebar — free-parameter sliders only.
+ * Displays sliders for detected free parameters.
  *
  * Props:
- *   xRange:           [number, number]
- *   yRange:           [number, number]
- *   onXRangeChange:   ([min, max]) => void
- *   onYRangeChange:   ([min, max]) => void
- *   freeParams:       { name: string, value: number }[]
- *   onParamChange:    (name: string, value: number) => void
+ *   freeParams:    { name: string, value: number }[]
+ *   onParamChange: (name: string, value: number) => void
  */
 export default function SliderSidebar({
-  xRange = [-10, 10],
-  yRange = [-10, 10],
-  onXRangeChange,
-  onYRangeChange,
   freeParams = [],
   onParamChange,
 }) {
+  if (freeParams.length === 0) return null
+
   return (
     <aside className={styles.sidebar}>
-      <span className={styles.sidebarTitle}>Viewport</span>
-
-      <DualRangeSlider
-        label="X"
-        min={-20} max={20}
-        value={xRange}
-        onChange={onXRangeChange}
-      />
-
-      <DualRangeSlider
-        label="Y"
-        min={-20} max={20}
-        value={yRange}
-        onChange={onYRangeChange}
-      />
-
-      {freeParams.length > 0 && (
-        <div className={styles.paramSection}>
-          <span className={styles.sidebarTitle} style={{ marginTop: 8 }}>Parameters</span>
-          {freeParams.map(({ name, value }) => (
-            <ParameterSlider
-              key={name}
-              name={name}
-              value={value}
-              onChange={onParamChange}
-            />
-          ))}
-        </div>
-      )}
+      <span className={styles.sidebarTitle}>Parameters</span>
+      {freeParams.map(({ name, value }) => (
+        <ParameterSlider
+          key={name}
+          name={name}
+          value={value}
+          onChange={onParamChange}
+        />
+      ))}
     </aside>
   )
 }
