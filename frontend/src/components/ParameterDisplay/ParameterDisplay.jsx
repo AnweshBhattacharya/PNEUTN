@@ -3,32 +3,17 @@ import styles from './ParameterDisplay.module.css'
 
 /**
  * ParameterDisplay — absolutely-positioned overlay in the top-right corner
- * of the graph canvas area. Shows current viewport x/y range and any active
- * free-parameter values.
+ * of the graph canvas area. Shows active free-parameter values.
  *
  * Props:
- *   xRange:       [number, number]
- *   yRange:       [number, number]
  *   paramValues:  Record<string, number>
  */
-function fmtVal(n) {
-  if (n == null || !isFinite(n)) return '0'
-  return Number.isInteger(n) ? String(n) : Number(n).toFixed(2)
-}
-
-export default function ParameterDisplay({ xRange = [-10, 10], yRange = [-10, 10], paramValues = {} }) {
+export default function ParameterDisplay({ paramValues = {} }) {
   const entries = Object.entries(paramValues)
+  if (entries.length === 0) return null
 
   return (
-    <div className={styles.overlay} aria-label="Current viewport and parameter values">
-      <div className={styles.row}>
-        <span className={styles.key}>x</span>
-        <span className={styles.val}>[{fmtVal(xRange[0])}, {fmtVal(xRange[1])}]</span>
-      </div>
-      <div className={styles.row}>
-        <span className={styles.key}>y</span>
-        <span className={styles.val}>[{fmtVal(yRange[0])}, {fmtVal(yRange[1])}]</span>
-      </div>
+    <div className={styles.overlay} aria-label="Current parameter values">
       {entries.map(([name, value]) => (
         <div key={name} className={styles.row}>
           <span className={styles.key}>{name}</span>

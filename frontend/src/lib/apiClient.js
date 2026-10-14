@@ -321,7 +321,7 @@ export async function integralOrder({ curve_upper, curve_lower, order }) {
   }
 }
 
-import { localGradient, localDivergence, localCurl } from './localSolve'
+import { localGradient, localDivergence, localCurl, localOde } from './localSolve'
 
 function isUnreachableError(e) {
   return (
@@ -390,39 +390,26 @@ export async function curl({ components }) {
 }
 
 /**
- * POST /solve — solve an ODE.
- * Payload: { operation: 'ode', ode }
- * The backend uses SymPy's dsolve; the local fallback returns an informational result.
+ * POST /solve or /ode — solve an ODE.
+ * Payload: { ode, expr, wrt }
+ * Solves with SymPy on backend; falls back to localOde when unreachable.
  */
-export async function ode({ ode: odeExpr }) {
+export async function ode({ ode: odeExpr, expr, wrt = 'x' }) {
   if (!BASE_URL) {
-    return {
-      result_latex: `\\text{ODE solver requires the backend (SymPy)}`,
-      steps: [{
-        rule: 'default',
-        before_latex: odeExpr,
-        after_latex: '\\text{Connect the backend for a symbolic solution.}',
-        explanation: 'ODE solving requires the SymPy backend. Run SAM locally or deploy to AWS.',
-        narrated_by: 'fallback_template',
-      }],
-      result_numeric_sample: [],
-      operation_type: 'ode',
-      _local: true,
-    }
+    return localOde({ ode: odeExpr, rhs: expr, wrt })
   }
   try {
-    return await post('/solve', { operation: 'ode', ode: odeExpr })
-  } catch (e) {
-    if (isUnreachableError(e)) {
-      console.warn('[apiClient] Backend unreachable — ODE fallback:', e.message)
-      return {
-        result_latex: `\\text{ODE solver requires the backend (SymPy)}`,
-        steps: [],
-        result_numeric_sample: [],
-        operation_type: 'ode',
-        _local: true,
+    return await post('/solve', { operation: 'ode', ode: odeExpr, expr, wrt })
+  } catch (err) {
+    // If /solve wasn't routed or failed, also attempt direct /ode endpoint
+    try {
+      return await post('/ode', { ode: odeExpr, expr, wrt })
+    } catch (e) {
+      if (isUnreachableError(err) || isUnreachableError(e)) {
+        console.warn('[apiClient] Backend unreachable — using local ODE solver:', (e || err).message)
+        return localOde({ ode: odeExpr, rhs: expr, wrt })
       }
+      throw e || err
     }
-    throw e
   }
 }

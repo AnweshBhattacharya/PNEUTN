@@ -550,3 +550,122 @@ class TestRouting:
         }
         status, body = parse_response(self.handler(event, None))
         assert status == 400
+
+
+# ── Vector Calculus (/solve & /vector) ───────────────────────────────────
+
+class TestVectorCalculus:
+    def setup_method(self):
+        import app as app_module
+        self.handler = app_module.handler
+
+    def test_gradient_via_solve(self):
+        event = make_event("/solve", {
+            "operation": "gradient",
+            "expr": "x^2 + y^2 + z^2",
+            "wrt_vars": ["x", "y", "z"],
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert body["operation_type"] == "gradient"
+        assert len(body["components"]) == 3
+        assert "2 x" in body["result_latex"] or "2*x" in body["result_latex"] or "2x" in body["result_latex"]
+        assert len(body["steps"]) == 3
+        assert "explanation" in body["steps"][0]
+
+    def test_gradient_via_vector_endpoint(self):
+        event = make_event("/vector", {
+            "operation": "gradient",
+            "expr": "x*y",
+            "wrt": ["x", "y"],
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert len(body["components"]) == 2
+
+    def test_divergence_via_solve(self):
+        event = make_event("/solve", {
+            "operation": "divergence",
+            "components": [
+                {"var": "x", "expr": "x^2"},
+                {"var": "y", "expr": "2*y"},
+                {"var": "z", "expr": "z^3"},
+            ],
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert body["operation_type"] == "divergence"
+        assert "result_latex" in body
+        # ∂/∂x(x²) + ∂/∂y(2y) + ∂/∂z(z³) = 2x + 2 + 3z²
+        assert "2 x" in body["result_latex"] or "2*x" in body["result_latex"] or "2x" in body["result_latex"]
+        assert len(body["steps"]) >= 3
+        assert "explanation" in body["steps"][0]
+
+    def test_curl_via_solve(self):
+        event = make_event("/solve", {
+            "operation": "curl",
+            "components": [
+                {"var": "x", "expr": "-y"},
+                {"var": "y", "expr": "x"},
+                {"var": "z", "expr": "0"},
+            ],
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert body["operation_type"] == "curl"
+        assert len(body["components"]) == 3
+        # curl(-y, x, 0) = (0, 0, 1 - (-1)) = (0, 0, 2)
+        z_comp = next(c for c in body["components"] if c["var"] == "z")
+        assert "2" in z_comp["latex"]
+        assert "explanation" in body["steps"][0]
+
+
+# ── Ordinary Differential Equations (/solve & /ode) ──────────────────────
+
+class TestOde:
+    def setup_method(self):
+        import app as app_module
+        self.handler = app_module.handler
+
+    def test_separable_ode_via_ode_endpoint(self):
+        event = make_event("/ode", {
+            "ode": "Derivative(y(x), x) - x*y(x)",
+            "wrt": "x",
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert body["operation_type"] == "ode"
+        # y(x) = C1 * exp(x^2/2)
+        assert "C_{1}" in body["result_latex"] or "C1" in body["result_latex"]
+        assert "exp" in body["result_latex"] or "e^" in body["result_latex"]
+        assert len(body["steps"]) >= 3
+        assert len(body["result_numeric_sample"]) > 0
+
+    def test_separable_ode_via_solve_endpoint(self):
+        event = make_event("/solve", {
+            "operation": "ode",
+            "ode": "dy/dx = -2*y",
+            "wrt": "x",
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert "result_latex" in body
+        assert "C_{1}" in body["result_latex"] or "C1" in body["result_latex"]
+
+    def test_ode_rhs_plain_expression(self):
+        event = make_event("/solve", {
+            "operation": "ode",
+            "ode": "x*y",
+            "wrt": "x",
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 200, body
+        assert "exp" in body["result_latex"] or "e^" in body["result_latex"]
+
+    def test_ode_invalid_expression_rejected(self):
+        event = make_event("/ode", {
+            "ode": "__import__('os').system('ls')",
+        })
+        status, body = parse_response(self.handler(event, None))
+        assert status == 400
+

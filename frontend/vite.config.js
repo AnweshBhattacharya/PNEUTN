@@ -13,6 +13,8 @@ export default defineConfig({
       '/solve':          { target: 'http://127.0.0.1:3000', changeOrigin: true },
       '/riemann':        { target: 'http://127.0.0.1:3000', changeOrigin: true },
       '/integral-order': { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/ode':            { target: 'http://127.0.0.1:3000', changeOrigin: true },
+      '/vector':         { target: 'http://127.0.0.1:3000', changeOrigin: true },
     },
   },
 
