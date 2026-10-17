@@ -30,7 +30,7 @@ const EXAMPLE_EXPRS = [
 
 let _nextId = 1
 function makeEq(expr = '') {
-  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [], operationType: null, components: [] }
+  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [], operationType: null, components: [], narration: null }
 }
 
 function SunIcon() {
@@ -270,6 +270,7 @@ export default function App() {
         numericSample: data.result_numeric_sample ?? [],
         operationType: data.operation_type ?? params.operation ?? 'derivative',
         components: data.components ?? [],
+        narration: data.narration ?? null,
       })
     } catch (e) {
       updateEquation(id, { loading: false, error: e.message || 'An error occurred.' })
@@ -486,6 +487,7 @@ export default function App() {
                 isLocal={activeEq.isLocal}
                 operationType={activeEq.operationType}
                 components={activeEq.components}
+                narration={activeEq.narration}
               />
             </div>
           </div>

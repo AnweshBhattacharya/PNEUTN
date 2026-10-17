@@ -40,6 +40,11 @@ function normaliseForEvaluation(exprStr) {
     .replace(/\bAbs\s*(?=\()/g, 'abs')
     .replace(/\bln\s*(?=\()/g, 'log')
 
+  // 0a. Collapse MathLive-style spaces: "log _e" → "log_e", "sin ^3" → "sin^3"
+  s = s.replace(/\b(log|ln|sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|exp|sqrt)\s+([_^])/g, '$1$2')
+  // 0b. Remove space before paren: "tan (x)" → "tan(x)"
+  s = s.replace(/\b(log|ln|sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|exp|sqrt|abs)\s+\(/g, '$1(')
+
   // 1. Rewrite log_base(...) -> log(...) or log(..., base)
   while (true) {
     const m = s.match(/\blog_([a-zA-Z0-9]+)\(/)
