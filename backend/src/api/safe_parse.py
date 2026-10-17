@@ -106,10 +106,23 @@ def _preprocess(expr_string: str) -> str:
     - log_2(x)   → log(x, 2)
     - log_e(x)   → log(x)       (natural log)
     - sec^N(x)   → (sec(x))**N  (trig power notation, nested-bracket safe)
+
+    Also handles MathLive ASCII-math quirks:
+    - "log _e", "sin ^3", "sec ^2" (spaces around _ and ^ after function names)
+    - "tan (x)" (space before opening paren after function names)
     """
     s = expr_string
 
-    # 0. Normalise ln(...) -> log(...)
+    # 0a. Collapse MathLive-style spaces around _ and ^ that follow function names.
+    #     e.g. "log _e" → "log_e",  "sin ^3" → "sin^3",  "sec ^2" → "sec^2"
+    func_names = r"(?:log|ln|sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|exp|sqrt)"
+    s = re.sub(rf"\b({func_names})\s+([_^])", r"\1\2", s)
+
+    # 0b. Remove spaces between function names and their opening parenthesis.
+    #     e.g. "tan (x)" → "tan(x)",  "log (x)" → "log(x)"
+    s = re.sub(rf"\b({func_names})\s+\(", r"\1(", s)
+
+    # 0c. Normalise ln(...) -> log(...)
     s = re.sub(r"\bln\s*\(", "log(", s)
 
     # 1. Bracket-aware rewrite for log_base(...)
