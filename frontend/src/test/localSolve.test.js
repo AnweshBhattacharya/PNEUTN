@@ -22,6 +22,14 @@ describe('localSolve', () => {
       expect(res.result_latex).toContain('cos')
     })
 
+    it('computes derivative of natural log ln(x) to 1/x', () => {
+      const res = localSolve({ expr: 'ln(x)', operation: 'derivative', wrt: 'x', order: 1 })
+      expect(res._local).toBe(true)
+      expect(res.steps[0].rule).toBe('log_rule')
+      expect(res.result_latex).toContain('x')
+      expect(res.result_latex).toContain('1')
+    })
+
     it('computes derivative of constant to 0', () => {
       const res = localSolve({ expr: '42', operation: 'derivative', wrt: 'x', order: 1 })
       expect(res.steps[0].rule).toBe('constant')
@@ -60,6 +68,12 @@ describe('localSolve', () => {
     it('handles exponential integrals', () => {
       const res = localSolve({ expr: 'exp(x)', operation: 'integral', wrt: 'x' })
       expect(res.result_latex).toContain('exp')
+    })
+
+    it('handles 1/x integral to log(x)', () => {
+      const res = localSolve({ expr: '1/x', operation: 'integral', wrt: 'x' })
+      expect(res.steps[0].rule).toBe('log_integral')
+      expect(res.result_latex).toContain('ln')
     })
   })
 

@@ -42,11 +42,13 @@ const NARRATION = {
   chain_rule:           'Apply the Chain Rule: differentiate the outer function, then multiply by the inner derivative.',
   trig_rule:            'Apply standard trigonometric derivative identity.',
   exp_rule:             'The derivative of eˣ is eˣ.',
+  log_rule:             'The derivative of ln(x) with respect to x is 1/x.',
   power_rule_integral:  'Apply the Reverse Power Rule: increase the exponent by 1, then divide by the new exponent.',
   sum_rule_integral:    'The integral of a sum equals the sum of the integrals.',
   u_substitution:       'Use u-substitution to integrate the composite function.',
   trig_integral:        'Use the standard trigonometric integral identity.',
   exp_integral:         'The integral of eˣ is eˣ.',
+  log_integral:         'The integral of 1/x is ln|x|.',
   evaluate_bounds:      'Evaluate the antiderivative at the upper bound and subtract the value at the lower bound.',
   default:              'Apply the appropriate calculus rule to transform this expression.',
 }
@@ -63,7 +65,7 @@ function narrate(rule) {
  */
 function derivativeSteps(exprStr, wrt, order, wrtSequence = null) {
   const steps = []
-  let current = exprStr
+  let current = exprStr.replace(/\bln\s*(?=\()/g, 'log')
   const seq = Array.isArray(wrtSequence) && wrtSequence.length > 0
     ? wrtSequence
     : Array(Math.max(1, order)).fill(wrt)
@@ -187,7 +189,8 @@ function detectDiffRule(node, wrt) {
   if (node.type === 'FunctionNode') {
     if (node.args[0]?.toString() !== wrt) return 'chain_rule'
     if (['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sec', 'csc', 'cot', 'sinh', 'cosh', 'tanh'].includes(node.name)) return 'trig_rule'
-    if (['exp', 'log', 'ln'].includes(node.name)) return 'exp_rule'
+    if (node.name === 'exp') return 'exp_rule'
+    if (['log', 'ln'].includes(node.name)) return 'log_rule'
     return 'default'
   }
   return 'default'
@@ -283,6 +286,10 @@ function detectIntegralRule(node, wrt) {
     if (['sin', 'cos', 'tan'].includes(name)) return 'trig_integral'
     if (name === 'exp') return 'exp_integral'
   }
+  if (node.type === 'OperatorNode' && node.op === '/') {
+    const [num, den] = node.args
+    if (!num.toString().includes(wrt) && den.toString() === wrt) return 'log_integral'
+  }
   if (node.type === 'SymbolNode' && node.name === wrt) return 'power_rule_integral'
   if (node.type === 'OperatorNode' && node.op === '*') return 'u_substitution'
   return 'default'
@@ -334,6 +341,17 @@ function integrateSimple(node, wrt) {
   // exp(x) → exp(x)
   if (node.type === 'FunctionNode' && node.name === 'exp' && node.args[0]?.toString() === wrt) {
     return `exp(${wrt})`
+  }
+  // 1/x → log(x)
+  if (node.type === 'OperatorNode' && node.op === '/') {
+    const [num, den] = node.args
+    if (!num.toString().includes(wrt) && den.toString() === wrt) {
+      return num.toString() === '1' ? `log(${wrt})` : `(${num.toString()}) * log(${wrt})`
+    }
+  }
+  // log(x) or ln(x) → x * log(x) - x
+  if (node.type === 'FunctionNode' && ['log', 'ln'].includes(node.name) && node.args[0]?.toString() === wrt) {
+    return `${wrt} * log(${wrt}) - ${wrt}`
   }
   // sum: a + b → int(a) + int(b)
   if (node.type === 'OperatorNode' && node.op === '+') {

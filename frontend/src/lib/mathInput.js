@@ -6,7 +6,7 @@ const FUNCTION_NAMES = [
   'asinh', 'acosh', 'atanh',
   'asin', 'acos', 'atan',
   'sinh', 'cosh', 'tanh',
-  'sqrt', 'sin', 'cos', 'tan', 'exp', 'log', 'Abs', 'sign',
+  'sqrt', 'sin', 'cos', 'tan', 'sec', 'csc', 'cot', 'exp', 'log', 'ln', 'Abs', 'sign',
 ]
 
 export function normaliseMathExpression(value) {

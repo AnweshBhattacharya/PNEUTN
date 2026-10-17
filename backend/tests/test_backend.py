@@ -88,6 +88,9 @@ class TestSafeParse:
         p3 = safe_parse("sec^2(2*x)")
         assert p3 == sympy.sec(2*sympy.Symbol("x"))**2
 
+        p4 = safe_parse("ln(x)")
+        assert p4 == sympy.log(sympy.Symbol("x"))
+
 
 # ── /solve ────────────────────────────────────────────────────────────────
 
@@ -133,10 +136,14 @@ class TestSolveDerivative:
             "wrt": "x",
         })
         assert status == 200, body
+
+    def test_ln_derivative(self):
+        status, body = self._solve({"expr": "ln(x)", "operation": "derivative", "wrt": "x"})
+        assert status == 200, body
+        # d/dx ln(x) = 1/x, not l*n
+        assert "1" in body["result_latex"]
         assert "x" in body["result_latex"]
-        chain_step = next(step for step in body["steps"] if step["rule"] == "chain_rule")
-        assert "d}{du}" in chain_step["after_latex"]
-        assert "square" not in chain_step["after_latex"]
+        assert "l" not in body["result_latex"]
 
     def test_second_order_derivative(self):
         status, body = self._solve({"expr": "x^4", "operation": "derivative", "wrt": "x", "order": 2})

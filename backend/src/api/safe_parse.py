@@ -73,7 +73,7 @@ _SAFE_GLOBAL_DICT = {
     "asin": asin, "acos": acos, "atan": atan,
     "sinh": sinh, "cosh": cosh, "tanh": tanh,
     "asinh": asinh, "acosh": acosh, "atanh": atanh,
-    "exp": exp,   "log": log,   "sqrt": sqrt,
+    "exp": exp,   "log": log,   "ln": log,   "sqrt": sqrt,
     "Abs": Abs,   "sign": sign,
     # Reciprocal trig
     "sec": sympy.sec, "csc": sympy.csc, "cot": sympy.cot,
@@ -108,6 +108,9 @@ def _preprocess(expr_string: str) -> str:
     - sec^N(x)   → (sec(x))**N  (trig power notation, nested-bracket safe)
     """
     s = expr_string
+
+    # 0. Normalise ln(...) -> log(...)
+    s = re.sub(r"\bln\s*\(", "log(", s)
 
     # 1. Bracket-aware rewrite for log_base(...)
     while True:
