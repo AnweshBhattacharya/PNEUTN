@@ -52,11 +52,9 @@ class TestSafeParse:
 
     def test_reject_disallowed_variable(self):
         from safe_parse import safe_parse, ExpressionError
-        # 'a' is not in ALLOWED_SYMBOLS
-        # This only fails if 'a' can't be parsed as a symbol — it may parse but
-        # fail at the post-parse validation step
+        # 'alpha' is not in ALLOWED_SYMBOLS (only single a-z and pi, E, I)
         with pytest.raises(ExpressionError):
-            safe_parse("a^2")
+            safe_parse("alpha^2")
 
     def test_reject_too_long(self):
         from safe_parse import safe_parse, ExpressionError
@@ -77,6 +75,18 @@ class TestSafeParse:
     def test_accept_hyperbolic_inverse_function(self):
         from safe_parse import safe_parse
         assert safe_parse("asinh(x)") is not None
+
+    def test_log_base_and_trig_power_preprocessing(self):
+        from safe_parse import safe_parse
+        import sympy
+        p1 = safe_parse("log_e(1 + x^3)")
+        assert p1 == sympy.log(1 + sympy.Symbol("x")**3)
+
+        p2 = safe_parse("sin^3(x)")
+        assert p2 == sympy.sin(sympy.Symbol("x"))**3
+
+        p3 = safe_parse("sec^2(2*x)")
+        assert p3 == sympy.sec(2*sympy.Symbol("x"))**2
 
 
 # ── /solve ────────────────────────────────────────────────────────────────

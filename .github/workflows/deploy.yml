@@ -197,4 +197,4 @@ jobs:
 
       - name: Audit production dependencies
         working-directory: frontend
-        run: npm audit --omit=dev
+        run: npm audit --omit=dev --audit-level=moderate

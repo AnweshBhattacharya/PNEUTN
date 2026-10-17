@@ -17,6 +17,20 @@ describe('mathEval', () => {
       expect(val).toBeCloseTo(1, 5) // sin(0)=0, exp(0)=1
     })
 
+    it('evaluates log_e, trig powers, and reciprocal trig', () => {
+      const c1 = compileExpr('log_e(1 + x^3)')
+      expect(c1).not.toBeNull()
+      expect(evalAt(c1, { x: 0 })).toBeCloseTo(0, 5) // ln(1) = 0
+
+      const c2 = compileExpr('sin^3(x)')
+      expect(c2).not.toBeNull()
+      expect(evalAt(c2, { x: Math.PI / 2 })).toBeCloseTo(1, 5)
+
+      const c3 = compileExpr('sec^2(x)')
+      expect(c3).not.toBeNull()
+      expect(evalAt(c3, { x: 0 })).toBeCloseTo(1, 5) // sec(0) = 1
+    })
+
     it('returns null for invalid expressions or evaluation errors', () => {
       const invalid = compileExpr('+++ invalid expression %%%')
       expect(invalid).toBeNull()

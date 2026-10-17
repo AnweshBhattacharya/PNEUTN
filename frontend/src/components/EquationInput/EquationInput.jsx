@@ -303,19 +303,19 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     onChange?.(rawExpr, ltx)
 
     // ── Auto-detect wrt from typed derivative notation ──
-    // Only fires when the WHOLE expression looks like d/d{var}(...) — not just any 'd'
+    // Only fires when the WHOLE expression looks like d/d{var}(...) or (d)/(d{var}) — not just any 'd'
     if (operation === 'derivative' && !isTotalDerivative) {
       const lower = rawExpr.toLowerCase()
-      // Match explicit d/dx or d/dy style — require the leading d/d prefix
-      const wrtMatch = lower.match(/^d\/d([xyzt])\s*\(?/)
+      // Match explicit d/dx, (d)/(dx), or (d)/(d x) style
+      const wrtMatch = lower.match(/^(?:d\/d([xyzt])|\(d\)\/\(d\s*([xyzt])\))\s*\(?/)
       if (wrtMatch) {
-        setWrtSequence([wrtMatch[1]])
+        setWrtSequence([wrtMatch[1] || wrtMatch[2]])
       }
     }
     if (operation === 'derivative' && isTotalDerivative) {
       const lower = rawExpr.toLowerCase()
-      const tMatch = lower.match(/\bd\/d([xyzt])\b/)
-      if (tMatch) setTotalWrt(tMatch[1])
+      const tMatch = lower.match(/(?:\bd\/d([xyzt])\b|\(d\)\/\(d\s*([xyzt])\))/)
+      if (tMatch) setTotalWrt(tMatch[1] || tMatch[2])
     }
 
     // ── Auto-detect integration order from trailing dx/dy/dz ──
@@ -402,20 +402,28 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     let expr = normaliseMathExpression(getExpressionValue(mlRef.current) || value || '')
 
     // ── Detect d/dx notation typed directly in the field ──
-    // Handles: d/dx(expr), d/dx expr, d^2/dx^2(expr), d/dy expr, etc.
+    // Handles: d/dx(expr), d/dx expr, (d)/(d x) expr, \frac{d}{dx} expr, d^2/dx^2(expr), etc.
     if (effectiveOperation === 'derivative' || !['gradient','divergence','curl','ode','integral'].includes(operation)) {
-      // Match d/dx(...) or d/d{var}(...) with optional exponent
-      const dydxMatch = expr.match(/^d(?:\^\d+)?\/d([xyzt])(?:\^\d+)?\s*\(?(.*?)\)?$/)
+      const dydxMatch = expr.match(/^(?:(?:\(d\)\/\(d\s*([xyzt])\))|(?:d(?:\^\d+)?\/d([xyzt])(?:\^\d+)?)|(?:\\frac\{d\}\{d([xyzt])\}))\s*(.*)$/i)
       if (dydxMatch) {
-        const detectedVar = dydxMatch[1]
-        const innerExpr = dydxMatch[2].replace(/^\(|\)$/g, '').trim()
+        const detectedVar = dydxMatch[1] || dydxMatch[2] || dydxMatch[3]
+        let innerExpr = (dydxMatch[4] || '').trim()
+        if (innerExpr.startsWith('(') && innerExpr.endsWith(')')) {
+          let depth = 0, canUnwrap = true
+          for (let i = 0; i < innerExpr.length - 1; i++) {
+            if (innerExpr[i] === '(') depth++
+            else if (innerExpr[i] === ')') {
+              depth--
+              if (depth === 0) { canUnwrap = false; break }
+            }
+          }
+          if (canUnwrap) innerExpr = innerExpr.slice(1, -1).trim()
+        }
         if (innerExpr) {
-          // Auto-switch to derivative and set wrt
           if (operation !== 'derivative') setOperation('derivative')
           setWrtSequence([detectedVar])
           lastSentRef.current = innerExpr
           onChange?.(innerExpr)
-          // Send to backend immediately
           onSolve?.({
             expr: innerExpr,
             operation: 'derivative',
@@ -428,6 +436,9 @@ export default function EquationInput({ value, onChange, onSolve, loading,
           return
         }
       }
+    }
+    if (effectiveOperation === 'derivative') {
+      expr = expr.replace(/^(?:\(d\)\/\(d\s*[xyzt]\)|d(?:\^\d+)?\/d[xyzt](?:\^\d+)?|\\frac\{d\}\{d[xyzt]\})\s*/i, '').trim()
     }
     // Strip trailing differential symbols (dx, dy, dz, dt) that the user typed
     // as navigation shortcuts — they're encoded in integrationSequence, not the expression

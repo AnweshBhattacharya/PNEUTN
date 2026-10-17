@@ -28,12 +28,14 @@ from sympy.parsing.sympy_parser import (
     convert_xor,
 )
 
-# Variables the user is allowed to reference
-ALLOWED_SYMBOLS = {"x", "y", "z", "t"}
+# Variables the user is allowed to reference — all single ASCII letters
+# plus common multi-letter constants. Single letters cover free parameters
+# like a, b, c, k, n that appear naturally in user expressions.
+ALLOWED_SYMBOLS = set("abcdefghijklmnopqrstuvwxyz") | {"pi", "E", "I"}
 
 # Functions the user is allowed to call (by name as they appear post-parse)
 ALLOWED_FUNCTIONS = {
-    "sin", "cos", "tan",
+    "sin", "cos", "tan", "sec", "csc", "cot",
     "exp", "log", "sqrt",
     "asin", "acos", "atan",
     "sinh", "cosh", "tanh", "asinh", "acosh", "atanh",
@@ -47,8 +49,9 @@ _TRANSFORMATIONS = standard_transformations + (
 )
 
 # Allowed characters: digits, ASCII letters, whitespace, basic arithmetic ops,
-# carets, parens, dot, comma. Underscores deliberately excluded to block dunder.
-_SAFE_CHAR_RE = re.compile(r"^[0-9a-zA-Z\s\+\-\*/\^\(\)\.,]+$")
+# carets, parens, dot, comma, underscore (for log_10 style notation — dunder
+# sequences are caught separately by the __ check below).
+_SAFE_CHAR_RE = re.compile(r"^[0-9a-zA-Z\s\+\-\*/\^\(\)\.,_]+$")
 
 # Curated safe global dict: only SymPy mathematical objects, zero Python builtins
 _SAFE_GLOBAL_DICT = {
@@ -72,6 +75,8 @@ _SAFE_GLOBAL_DICT = {
     "asinh": asinh, "acosh": acosh, "atanh": atanh,
     "exp": exp,   "log": log,   "sqrt": sqrt,
     "Abs": Abs,   "sign": sign,
+    # Reciprocal trig
+    "sec": sympy.sec, "csc": sympy.csc, "cot": sympy.cot,
 }
 
 
@@ -90,10 +95,72 @@ def _validate_expression_complexity(parsed: sympy.Expr) -> None:
     if node_count > MAX_EXPRESSION_NODES:
         raise ExpressionError("Expression is too complex. Use at most 100 mathematical terms.")
 
-    # SymPy represents 1 / 0, log(0), and similar non-finite input as these
-    # values. Rejecting them avoids invalid JSON values and undefined graphing.
     if parsed.has(sympy.oo, sympy.zoo, sympy.nan):
         raise ExpressionError("Expression must evaluate to a finite mathematical value.")
+
+
+def _preprocess(expr_string: str) -> str:
+    """
+    Normalise common notations before SymPy parsing:
+    - log_10(x)  → log(x, 10)
+    - log_2(x)   → log(x, 2)
+    - log_e(x)   → log(x)       (natural log)
+    - sec^N(x)   → (sec(x))**N  (trig power notation, nested-bracket safe)
+    """
+    s = expr_string
+
+    # 1. Bracket-aware rewrite for log_base(...)
+    while True:
+        m = re.search(r"\blog_([a-zA-Z0-9]+)\(", s)
+        if not m:
+            break
+        base = m.group(1)
+        start_paren = m.end() - 1
+        depth = 0
+        end_paren = -1
+        for i in range(start_paren, len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end_paren = i
+                    break
+        if end_paren == -1:
+            break
+        inner = _preprocess(s[start_paren + 1:end_paren])
+        if base.lower() in ("e", "n", "c", "ln"):
+            rep = f"log({inner})"
+        else:
+            rep = f"log({inner}, {base})"
+        s = s[:m.start()] + rep + s[end_paren + 1:]
+
+    # 2. Bracket-aware rewrite for trig^N(...) -> (trig(...))**N
+    funcs = "sin|cos|tan|sec|csc|cot|sinh|cosh|tanh"
+    while True:
+        m = re.search(rf"\b({funcs})\^(\d+)\(", s)
+        if not m:
+            break
+        fn = m.group(1)
+        pwr = m.group(2)
+        start_paren = m.end() - 1
+        depth = 0
+        end_paren = -1
+        for i in range(start_paren, len(s)):
+            if s[i] == "(":
+                depth += 1
+            elif s[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end_paren = i
+                    break
+        if end_paren == -1:
+            break
+        inner = _preprocess(s[start_paren + 1:end_paren])
+        rep = f"({fn}({inner}))**{pwr}"
+        s = s[:m.start()] + rep + s[end_paren + 1:]
+
+    return s
 
 
 def safe_parse(expr_string: str) -> sympy.Expr:
@@ -102,11 +169,9 @@ def safe_parse(expr_string: str) -> sympy.Expr:
 
     Four protection layers:
     1. Length cap
-    2. Character whitelist (no underscores, no import/exec/eval keywords)
+    2. Character whitelist + dunder check (no __import__, no __builtins__)
     3. parse_expr with curated global_dict (SymPy types only, no builtins)
     4. Post-parse symbol + function allowlist validation
-
-    Raises ExpressionError on any violation; returns SymPy Expr on success.
     """
     if not isinstance(expr_string, str):
         raise ExpressionError("Expression must be a string.")
@@ -115,25 +180,29 @@ def safe_parse(expr_string: str) -> sympy.Expr:
     if len(expr_string) > MAX_EXPRESSION_LENGTH:
         raise ExpressionError(f"Expression too long (max {MAX_EXPRESSION_LENGTH} characters).")
 
-    # ── Layer 2: character whitelist ─────────────────────────────────────
+    # ── Layer 2: character whitelist + dunder check ───────────────────────
     if not _SAFE_CHAR_RE.match(expr_string):
         raise ExpressionError(
             "Expression contains disallowed characters. "
-            "Only digits, letters, +, -, *, /, ^, (, ), ., , and spaces are permitted."
+            "Only digits, letters, +, -, *, /, ^, (, ), ., , _ and spaces are permitted."
         )
+    # Dunder sequences are the real injection risk — block them explicitly.
+    if "__" in expr_string:
+        raise ExpressionError("Invalid expression.")
+
+    # ── Pre-processing: normalise notation ───────────────────────────────
+    preprocessed = _preprocess(expr_string)
 
     # ── Layer 3: parse_expr with safe global dict ─────────────────────────
     try:
         parsed = parse_expr(
-            expr_string,
+            preprocessed,
             transformations=_TRANSFORMATIONS,
             local_dict={},
             global_dict=_SAFE_GLOBAL_DICT,
             evaluate=True,
         )
     except Exception as exc:
-        # Parser internals can vary by SymPy release. Keep the public error
-        # stable instead of exposing implementation details to the client.
         raise ExpressionError("Could not parse expression. Check its syntax.") from exc
 
     _validate_expression_complexity(parsed)
@@ -143,7 +212,7 @@ def safe_parse(expr_string: str) -> sympy.Expr:
         if str(sym) not in ALLOWED_SYMBOLS:
             raise ExpressionError(
                 f"Disallowed variable '{sym}'. "
-                f"Allowed variables: {', '.join(sorted(ALLOWED_SYMBOLS))}."
+                f"Use single letters (a–z) or standard constants (pi, E, I)."
             )
 
     for func in parsed.atoms(sympy.Function):
@@ -151,7 +220,7 @@ def safe_parse(expr_string: str) -> sympy.Expr:
         if fname not in ALLOWED_FUNCTIONS:
             raise ExpressionError(
                 f"Disallowed function '{fname}'. "
-                f"Allowed functions: {', '.join(sorted(ALLOWED_FUNCTIONS))}."
+                f"Allowed: {', '.join(sorted(ALLOWED_FUNCTIONS))}."
             )
 
     return parsed
