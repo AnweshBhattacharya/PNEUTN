@@ -26,23 +26,71 @@ math.import({
   resolve: () => { throw new Error('Function resolve is disabled') },
 }, { override: true })
 
-const SAFE_CHARACTERS = /^[0-9a-zA-Z\s+\-*/^().,]+$/
+const SAFE_CHARACTERS = /^[0-9a-zA-Z\s+\-*/^().,_]+$/
 const ALLOWED_FUNCTIONS = new Set([
-  'sin', 'cos', 'tan', 'exp', 'log', 'sqrt',
+  'sin', 'cos', 'tan', 'sec', 'csc', 'cot',
+  'exp', 'log', 'ln', 'sqrt',
   'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
   'asinh', 'acosh', 'atanh', 'abs', 'sign',
 ])
 const ALLOWED_OPERATORS = new Set(['+', '-', '*', '/', '^'])
 
 function normaliseForEvaluation(exprStr) {
-  return normaliseMathExpression(exprStr)
+  let s = normaliseMathExpression(exprStr)
     .replace(/\bAbs\s*(?=\()/g, 'abs')
+    .replace(/\bln\s*(?=\()/g, 'log')
+
+  // 1. Rewrite log_base(...) -> log(...) or log(..., base)
+  while (true) {
+    const m = s.match(/\blog_([a-zA-Z0-9]+)\(/)
+    if (!m) break
+    const base = m[1]
+    const start = m.index + m[0].length - 1
+    let depth = 0, end = -1
+    for (let i = start; i < s.length; i++) {
+      if (s[i] === '(') depth++
+      else if (s[i] === ')') {
+        depth--
+        if (depth === 0) { end = i; break }
+      }
+    }
+    if (end === -1) break
+    const inner = normaliseForEvaluation(s.slice(start + 1, end))
+    const rep = ['e', 'n', 'c', 'ln'].includes(base.toLowerCase())
+      ? `log(${inner})`
+      : `log(${inner}, ${base})`
+    s = s.slice(0, m.index) + rep + s.slice(end + 1)
+  }
+
+  // 2. Rewrite trig^N(...) -> (trig(...))^N
+  const funcs = 'sin|cos|tan|sec|csc|cot|sinh|cosh|tanh'
+  const trigRegex = new RegExp(`\\b(${funcs})\\^(\\d+)\\(`)
+  while (true) {
+    const m = s.match(trigRegex)
+    if (!m) break
+    const fn = m[1], pwr = m[2]
+    const start = m.index + m[0].length - 1
+    let depth = 0, end = -1
+    for (let i = start; i < s.length; i++) {
+      if (s[i] === '(') depth++
+      else if (s[i] === ')') {
+        depth--
+        if (depth === 0) { end = i; break }
+      }
+    }
+    if (end === -1) break
+    const inner = normaliseForEvaluation(s.slice(start + 1, end))
+    const rep = `(${fn}(${inner}))^${pwr}`
+    s = s.slice(0, m.index) + rep + s.slice(end + 1)
+  }
+
+  return s
 }
 
 function isAllowedSymbol(name) {
   // Single-letter variables retain support for graph parameter sliders, while
   // blocking math.js namespace names such as `import` and `createUnit`.
-  return /^[a-zA-Z]$/.test(name) || name === 'pi' || name === 'E'
+  return /^[a-zA-Z]$/.test(name) || name === 'pi' || name === 'E' || name === 'e'
 }
 
 function validateNode(node) {
@@ -104,6 +152,7 @@ export function evalAt(compiled, scope) {
     const safeScope = new Map(Object.entries(scope || {}))
     safeScope.set('pi', Math.PI)
     safeScope.set('E', Math.E)
+    safeScope.set('e', Math.E)
     const result = compiled.evaluate(safeScope)
     if (typeof result !== 'number' || !isFinite(result)) return null
     return result
