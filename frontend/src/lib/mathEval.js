@@ -67,8 +67,12 @@ function normaliseForEvaluation(exprStr) {
     s = s.slice(0, m.index) + rep + s.slice(end + 1)
   }
 
-  // 2. Rewrite trig^N(...) -> (trig(...))^N
+  // 2a. Rewrite trig^N followed by a simple argument without parens:
+  //     e.g. sec^2 2x → (sec(2x))^2, sin^2 x → (sin(x))^2
   const funcs = 'sin|cos|tan|sec|csc|cot|sinh|cosh|tanh'
+  s = s.replace(new RegExp(`\\b(${funcs})\\^(\\d+)\\s+([0-9a-zA-Z]+)`, 'g'), '($1($3))^$2')
+
+  // 2b. Rewrite trig^N(...) -> (trig(...))^N
   const trigRegex = new RegExp(`\\b(${funcs})\\^(\\d+)\\(`)
   while (true) {
     const m = s.match(trigRegex)

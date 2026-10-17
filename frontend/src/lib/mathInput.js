@@ -14,13 +14,20 @@ export function normaliseMathExpression(value) {
   let expression = value
 
   // 1. Normalize Unicode symbols
-  expression = expression.replace(/[\u2217\u00d7\u00b7\u22c5\u2062]/g, '*')
-  expression = expression.replace(/[\u2212\u2013\u2014]/g, '-')
+  expression = expression.replace(/[\u2217\u00d7\u00b7\u22c5\u2022\u2219\u2218\u2299\u2062]/g, '*')
+  expression = expression.replace(/[\u2212\u2013\u2014\u2015]/g, '-')
   expression = expression.replace(/\u00f7/g, '/')
 
+  // 1b. Normalize Unicode superscripts -> ^N
+  const superscripts = {
+    '⁰': '^0', '¹': '^1', '²': '^2', '³': '^3', '⁴': '^4',
+    '⁵': '^5', '⁶': '^6', '⁷': '^7', '⁸': '^8', '⁹': '^9',
+  }
+  for (const [sup, rep] of Object.entries(superscripts)) {
+    expression = expression.replaceAll(sup, rep)
+  }
+
   // 2. Normalize Unicode greek letters to ascii names (from MathLive ascii-math output)
-  // MathLive ascii-math serializes π → "pi", φ → "phi", etc. already.
-  // But sometimes it outputs raw Unicode characters.
   expression = expression.replace(/π/g, 'pi')
   expression = expression.replace(/φ/g, 'phi')
   expression = expression.replace(/θ/g, 'theta')
@@ -30,13 +37,33 @@ export function normaliseMathExpression(value) {
   // 3. MathLive AsciiMath uses `**` for asterisk multiplication or `xx` for \times
   expression = expression.replace(/\s*\*\*\s*/g, ' * ')
   expression = expression.replace(/\bxx\b/g, '*')
-  expression = expression.replace(/\\cdot|\\times/g, '*')
+  expression = expression.replace(/\\cdot|\\times|\bcdot\b|\bc\s*d\s*o\s*t\b/gi, '*')
+  expression = expression.replace(/\\(?:left|right)\b/g, '')
+  expression = expression.replace(/\b(?:left|right)\b/gi, '')
+  expression = expression.replace(/l\s*e\s*f\s*t\s*\(/gi, '(')
+  expression = expression.replace(/r\s*i\s*g\s*h\s*t\s*\)/gi, ')')
 
-  // 4. MathLive can serialize manually typed function names as `s i n(x)`.
+  // 3b. Convert braces and brackets to parentheses
+  expression = expression.replace(/[{[]/g, '(')
+  expression = expression.replace(/[}\]]/g, ')')
+
+  // 3c. Collapse spaced decimals (e.g. 0 . 2 5 -> 0.25)
+  expression = expression.replace(/\b(\d+)\s*\.\s*([\d\s]+)\b/g, match => match.replace(/\s+/g, ''))
+
+  // 4. MathLive can serialize manually typed function names spaced out, e.g. `l o g _ e`, `s i n ^ 3`.
   for (const name of FUNCTION_NAMES) {
     const spacedName = name.split('').join('\\s*')
-    expression = expression.replace(new RegExp(`${spacedName}\\s*(?=\\()`, 'gi'), name)
+    expression = expression.replace(new RegExp(`\\b${spacedName}(?=[(_^\\s\\d]|[a-zA-Z]|$)`, 'gi'), name)
   }
+
+  // 4b. Collapse spaces around _ and ^ following function names (e.g. "log _e" -> "log_e", "sin ^3" -> "sin^3")
+  const funcs = FUNCTION_NAMES.join('|')
+  expression = expression.replace(new RegExp(`\\b(${funcs})\\s*([_^])\\s*([a-zA-Z0-9]+)`, 'gi'), '$1$2$3')
+  expression = expression.replace(new RegExp(`\\b(${funcs})\\s*\\(`, 'gi'), '$1(')
+
+  // 4c. Clean up log_(base) -> log_base and fn^(pwr) -> fn^pwr
+  expression = expression.replace(/\blog_\(([a-zA-Z0-9]+)\)/g, 'log_$1')
+  expression = expression.replace(/\b([a-zA-Z]+)\^\(([0-9]+)\)/g, '$1^$2')
 
   // 5. Clean up empty fractions `(())/(())` to a more readable placeholder like `?/?`
   expression = expression.replace(/\(\(\)\)\/\(\(\)\)/g, '?/?')

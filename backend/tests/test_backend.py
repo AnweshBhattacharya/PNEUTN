@@ -91,6 +91,19 @@ class TestSafeParse:
         p4 = safe_parse("ln(x)")
         assert p4 == sympy.log(sympy.Symbol("x"))
 
+        # Unparenthesized trig power: sec^2 2x
+        p5 = safe_parse("sec^2 2x")
+        assert p5 == sympy.sec(2 * sympy.Symbol("x"))**2
+
+        # Unicode multiplication (middle dot, bullet, times) & braces
+        p6 = safe_parse("x · y + (x+1)^{2}")
+        assert p6 == sympy.Symbol("x") * sympy.Symbol("y") + (sympy.Symbol("x") + 1)**2
+
+        # Complex expression with spaced notation, braces, middle dot, and fractions
+        complex_expr = "log _e((sin ^3(e^(x^2+2xy)) + (x^3+5x)^0.25)/(sec ^2 2x · (xy)^e))"
+        p7 = safe_parse(complex_expr)
+        assert p7 is not None
+
 
 # ── /solve ────────────────────────────────────────────────────────────────
 

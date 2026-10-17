@@ -23,6 +23,25 @@ describe('normaliseMathExpression', () => {
     expect(normaliseMathExpression('a ** x^2 + b ** x + c')).toBe('a * x^2 + b * x + c')
     // LaTeX \cdot and \times
     expect(normaliseMathExpression('a \\cdot x + b \\times y')).toBe('a * x + b * y')
+    // Bullet \u2022 and bullet operator \u2219
+    expect(normaliseMathExpression('x \u2022 y + z \u2219 w')).toBe('x * y + z * w')
+  })
+
+  it('normalizes braces, spaced functions with subscripts/powers, and spaced decimals', () => {
+    expect(normaliseMathExpression('l o g _ e(x)')).toBe('log_e(x)')
+    expect(normaliseMathExpression('s i n ^ 3(x)')).toBe('sin^3(x)')
+    expect(normaliseMathExpression('s e c ^ 2 2x')).toBe('sec^2 2x')
+    expect(normaliseMathExpression('(x+1)^{2}')).toBe('(x+1)^(2)')
+    expect(normaliseMathExpression('log_{e}(x)')).toBe('log_e(x)')
+    expect(normaliseMathExpression('(x^3+5x)^0 . 2 5')).toBe('(x^3+5x)^0.25')
+  })
+
+  it('normalizes user complex expression', () => {
+    const input = 'log _e((sin ^3(e^(x^2+2xy)) + (x^3+5x)^0.25)/(sec ^2 2x · (xy)^e))'
+    const norm = normaliseMathExpression(input)
+    expect(norm).toContain('log_e(')
+    expect(norm).toContain('sin^3(')
+    expect(norm).toContain('sec^2 2x * (xy)^e')
   })
 })
 

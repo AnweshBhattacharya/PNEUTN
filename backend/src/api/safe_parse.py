@@ -99,6 +99,51 @@ def _validate_expression_complexity(parsed: sympy.Expr) -> None:
         raise ExpressionError("Expression must evaluate to a finite mathematical value.")
 
 
+def _normalize_characters(s: str) -> str:
+    """Normalize Unicode operators, symbols, superscripts, and brackets to ASCII."""
+    # 1. Unicode multiplication symbols -> *
+    s = re.sub(r"[\u00b7\u22c5\u2022\u2219\u2218\u2299\u00d7\u2217\u2062]", "*", s)
+
+    # 2. Unicode minus / dashes -> -
+    s = re.sub(r"[\u2212\u2013\u2014\u2015]", "-", s)
+
+    # 3. Unicode division -> /
+    s = re.sub(r"[\u00f7]", "/", s)
+
+    # 4. Unicode superscripts -> ^N
+    superscripts = {
+        '⁰': '^0', '¹': '^1', '²': '^2', '³': '^3', '⁴': '^4',
+        '⁵': '^5', '⁶': '^6', '⁷': '^7', '⁸': '^8', '⁹': '^9',
+    }
+    for sup, rep in superscripts.items():
+        s = s.replace(sup, rep)
+
+    # 5. Greek letters and mathematical constants/symbols
+    s = re.sub(r"π", "pi", s)
+    s = re.sub(r"φ", "phi", s)
+    s = re.sub(r"θ", "theta", s)
+    s = re.sub(r"√", "sqrt", s)
+    s = re.sub(r"∞", "oo", s)
+
+    # 6. LaTeX residuals like \cdot, \times, \left, \right
+    s = re.sub(r"\\(?:cdot|times)\b", "*", s)
+    s = re.sub(r"\b(?:cdot|times)\b", "*", s)
+    s = re.sub(r"\\(?:left|right)\b", "", s)
+    s = re.sub(r"\b(?:left|right)\b", "", s)
+    s = re.sub(r"l\s*e\s*f\s*t\s*\(", "(", s, flags=re.IGNORECASE)
+    s = re.sub(r"r\s*i\s*g\s*h\s*t\s*\)", ")", s, flags=re.IGNORECASE)
+
+    # 7. Curly braces and brackets -> parentheses
+    s = s.replace("{", "(").replace("}", ")")
+    s = s.replace("[", "(").replace("]", ")")
+
+    # 8. Collapse log_(base) -> log_base and fn^(pwr) -> fn^pwr
+    s = re.sub(r"\blog_\(([a-zA-Z0-9]+)\)", r"log_\1", s)
+    s = re.sub(r"\b([a-zA-Z]+)\^\(([0-9]+)\)", r"\1^\2", s)
+
+    return s
+
+
 def _preprocess(expr_string: str) -> str:
     """
     Normalise common notations before SymPy parsing:
@@ -106,23 +151,35 @@ def _preprocess(expr_string: str) -> str:
     - log_2(x)   → log(x, 2)
     - log_e(x)   → log(x)       (natural log)
     - sec^N(x)   → (sec(x))**N  (trig power notation, nested-bracket safe)
+    - sec^N 2x   → (sec(2x))**N (trig power without outer parentheses)
 
     Also handles MathLive ASCII-math quirks:
+    - Spaced function names: "l o g", "s i n", "s e c"
     - "log _e", "sin ^3", "sec ^2" (spaces around _ and ^ after function names)
     - "tan (x)" (space before opening paren after function names)
+    - Spaced decimals: "0 . 2 5" → "0.25"
     """
     s = expr_string
 
-    # 0a. Collapse MathLive-style spaces around _ and ^ that follow function names.
-    #     e.g. "log _e" → "log_e",  "sin ^3" → "sin^3",  "sec ^2" → "sec^2"
-    func_names = r"(?:log|ln|sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|exp|sqrt)"
-    s = re.sub(rf"\b({func_names})\s+([_^])", r"\1\2", s)
+    # 0a. Collapse spaced decimals: "0 . 2 5" → "0.25"
+    s = re.sub(r"\b(\d+)\s*\.\s*([\d\s]+)\b", lambda m: m.group(0).replace(" ", ""), s)
 
-    # 0b. Remove spaces between function names and their opening parenthesis.
+    # 0b. Collapse MathLive-style spaced function names: "l o g", "s i n", "s e c"
+    all_funcs = sorted(list(ALLOWED_FUNCTIONS) + ["log", "ln"], key=len, reverse=True)
+    for fn in all_funcs:
+        spaced = r"\s*".join(list(fn))
+        s = re.sub(rf"\b{spaced}(?=[(_^\s\d]|[a-zA-Z]|$)", fn, s, flags=re.IGNORECASE)
+
+    # 0c. Collapse MathLive-style spaces around _ and ^ that follow function names.
+    #     e.g. "log _e" → "log_e",  "sin ^3" → "sin^3",  "sec ^2" → "sec^2"
+    func_names = r"(?:log|ln|sin|cos|tan|sec|csc|cot|sinh|cosh|tanh|exp|sqrt|asin|acos|atan|asinh|acosh|atanh|Abs|abs|sign)"
+    s = re.sub(rf"\b({func_names})\s*([_^])\s*([a-zA-Z0-9]+)", r"\1\2\3", s)
+
+    # 0d. Remove spaces between function names and their opening parenthesis.
     #     e.g. "tan (x)" → "tan(x)",  "log (x)" → "log(x)"
     s = re.sub(rf"\b({func_names})\s+\(", r"\1(", s)
 
-    # 0c. Normalise ln(...) -> log(...)
+    # 0e. Normalise ln(...) -> log(...)
     s = re.sub(r"\bln\s*\(", "log(", s)
 
     # 1. Bracket-aware rewrite for log_base(...)
@@ -151,8 +208,12 @@ def _preprocess(expr_string: str) -> str:
             rep = f"log({inner}, {base})"
         s = s[:m.start()] + rep + s[end_paren + 1:]
 
-    # 2. Bracket-aware rewrite for trig^N(...) -> (trig(...))**N
+    # 2a. Rewrite trig^N followed by a simple argument without parens:
+    #     e.g. sec^2 2x → (sec(2x))**2, sin^2 x → (sin(x))**2
     funcs = "sin|cos|tan|sec|csc|cot|sinh|cosh|tanh"
+    s = re.sub(rf"\b({funcs})\^(\d+)\s+([0-9a-zA-Z]+)", r"(\1(\3))**\2", s)
+
+    # 2b. Bracket-aware rewrite for trig^N(...) -> (trig(...))**N
     while True:
         m = re.search(rf"\b({funcs})\^(\d+)\(", s)
         if not m:
@@ -191,6 +252,9 @@ def safe_parse(expr_string: str) -> sympy.Expr:
     """
     if not isinstance(expr_string, str):
         raise ExpressionError("Expression must be a string.")
+
+    # ── Unicode & notation normalization ─────────────────────────────────
+    expr_string = _normalize_characters(expr_string.strip())
 
     # ── Layer 1: length cap ──────────────────────────────────────────────
     if len(expr_string) > MAX_EXPRESSION_LENGTH:
@@ -274,7 +338,7 @@ def safe_parse_ode(ode_string: str, wrt_name: str = "x") -> tuple[sympy.Expr, sy
     wrt_sym = Symbol(wrt_str)
     y_func = sympy.Function("y")(wrt_sym)
 
-    s = ode_string.strip().replace("’", "'")
+    s = _normalize_characters(ode_string.strip()).replace("’", "'")
     if len(s) > MAX_EXPRESSION_LENGTH:
         raise ExpressionError(f"Expression too long (max {MAX_EXPRESSION_LENGTH} characters).")
 

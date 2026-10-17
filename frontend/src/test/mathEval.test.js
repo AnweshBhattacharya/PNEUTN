@@ -29,6 +29,23 @@ describe('mathEval', () => {
       const c3 = compileExpr('sec^2(x)')
       expect(c3).not.toBeNull()
       expect(evalAt(c3, { x: 0 })).toBeCloseTo(1, 5) // sec(0) = 1
+
+      // Unparenthesized trig power
+      const c4 = compileExpr('sec^2 2x')
+      expect(c4).not.toBeNull()
+      expect(evalAt(c4, { x: 0 })).toBeCloseTo(1, 5)
+
+      // Spaced log_e
+      const c5 = compileExpr('l o g _ e(1 + x)')
+      expect(c5).not.toBeNull()
+      expect(evalAt(c5, { x: 0 })).toBeCloseTo(0, 5)
+
+      // User complex expression with multiple variables x and y
+      const c6 = compileExpr('log _e((sin ^3(e^(x^2+2*x*y)) + (x^3+5*x)^0.25)/(sec ^2 2x · (x*y)^e))')
+      expect(c6).not.toBeNull()
+      const val = evalAt(c6, { x: 1, y: 1 })
+      expect(typeof val).toBe('number')
+      expect(Number.isFinite(val)).toBe(true)
     })
 
     it('returns null for invalid expressions or evaluation errors', () => {
