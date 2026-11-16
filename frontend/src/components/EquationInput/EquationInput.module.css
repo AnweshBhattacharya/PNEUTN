@@ -298,6 +298,45 @@
   flex-shrink: 0;
 }
 
+.autoFixPill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--content-primary);
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--accent, #2563eb) 10%, var(--surface-raised));
+  border-bottom: 1px solid var(--accent, #2563eb);
+  flex-shrink: 0;
+}
+
+.autoFixText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autoFixBtn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  background: var(--accent, #2563eb);
+  color: #ffffff;
+  border: 1px solid var(--accent, #2563eb);
+  border-radius: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--duration-fast);
+}
+.autoFixBtn:hover {
+  opacity: 0.88;
+}
+
 /* ── Suggestions ── */
 .suggestions {
   list-style: none;

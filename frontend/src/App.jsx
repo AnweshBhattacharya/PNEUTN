@@ -3,6 +3,7 @@ import EquationInput from './components/EquationInput/EquationInput'
 import GraphCanvas2D from './components/GraphCanvas2D/GraphCanvas2D'
 import GraphCanvas3D from './components/GraphCanvas3D/GraphCanvas3D'
 import { detectFreeParams } from './lib/freeParams'
+import { suggestFix } from './lib/smartSyntax'
 import StepPanel from './components/StepPanel/StepPanel'
 import RiemannControls from './components/RiemannControls/RiemannControls'
 import RegionToggle from './components/RegionToggle/RegionToggle'
@@ -30,7 +31,7 @@ const EXAMPLE_EXPRS = [
 
 let _nextId = 1
 function makeEq(expr = '') {
-  return { id: String(_nextId++), expr, result: null, error: null, loading: false, isLocal: false, steps: [], numericSample: [], operationType: null, components: [], narration: null }
+  return { id: String(_nextId++), expr, result: null, error: null, suggestion: null, loading: false, isLocal: false, steps: [], numericSample: [], operationType: null, components: [], narration: null }
 }
 
 function SunIcon() {
@@ -273,9 +274,56 @@ export default function App() {
         narration: data.narration ?? null,
       })
     } catch (e) {
-      updateEquation(id, { loading: false, error: e.message || 'An error occurred.' })
+      const activeExpr = params.expr || (equations.find(eq => eq.id === id)?.expr) || ''
+      const fix = e.suggestion || suggestFix(activeExpr)?.fixedExpr || null
+      updateEquation(id, {
+        loading: false,
+        error: e.message || 'An error occurred.',
+        suggestion: fix,
+      })
     }
+  }, [activeId, equations, updateEquation])
+
+  const handleApplySuggestion = useCallback((sugg) => {
+    if (!sugg) return
+    // Update the expr field and clear the error — user can re-click Solve with correct operation
+    updateEquation(activeId, { expr: sugg, error: null, suggestion: null })
   }, [activeId, updateEquation])
+
+  const [copiedShare, setCopiedShare] = useState(false)
+  const handleShare = useCallback(() => {
+    try {
+      const params = new URLSearchParams()
+      if (activeEq?.expr) params.set('expr', activeEq.expr)
+      if (operationMode) params.set('op', operationMode)
+      const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(url)
+        setCopiedShare(true)
+        setTimeout(() => setCopiedShare(false), 2000)
+      }
+    } catch {}
+  }, [activeEq?.expr, operationMode])
+
+  // Read URL search params on mount: e.g. ?expr=x^2&op=derivative
+  useEffect(() => {
+    try {
+      const search = window.location.search
+      if (!search) return
+      const params = new URLSearchParams(search)
+      const qExpr = params.get('expr')
+      const qOp = params.get('op')
+      if (qExpr) {
+        updateEquation(activeId, { expr: qExpr })
+        if (qOp) {
+          setActiveExamplePatch({ operation: qOp })
+        }
+        setTimeout(() => {
+          handleSolve({ expr: qExpr, operation: qOp || 'derivative' })
+        }, 150)
+      }
+    } catch {}
+  }, [])
 
   // ── 3D Riemann bars request ───────────────────────────────────────
   const handleRiemann3DRequest = useCallback(async () => {
@@ -414,8 +462,17 @@ export default function App() {
         {/* Center: brand */}
         <span className={styles.brand}>PNEUTN</span>
 
-        {/* Right slot: theme toggle */}
+        {/* Right slot: share + theme toggle */}
         <div className={styles.topBarRight}>
+          <button
+            className={styles.shareBtn}
+            onClick={handleShare}
+            title="Copy shareable link"
+            aria-label="Share equation link"
+            type="button"
+          >
+            {copiedShare ? '✓ Copied' : '🔗 Share'}
+          </button>
           <button className={styles.themeBtn} onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
@@ -439,7 +496,14 @@ export default function App() {
           <button key={id} role="tab"
             aria-selected={mobilePanel === id}
             className={`${styles.mobileTab} ${mobilePanel === id ? styles.mobileTabActive : ''}`}
-            onClick={() => setMobilePanel(id)}>
+            onClick={() => {
+              setMobilePanel(id)
+              if (id === 'graph') {
+                setTimeout(() => {
+                  document.getElementById('graph-section')?.scrollIntoView({ behavior: 'smooth' })
+                }, 50)
+              }
+            }}>
             {label}
             {badge > 0 && <span className={styles.stepCountBadge}>{badge}</span>}
           </button>
@@ -488,6 +552,8 @@ export default function App() {
                 operationType={activeEq.operationType}
                 components={activeEq.components}
                 narration={activeEq.narration}
+                suggestion={activeEq.suggestion}
+                onApplySuggestion={handleApplySuggestion}
               />
             </div>
           </div>
@@ -955,6 +1021,11 @@ export default function App() {
                   showWireframe={showWireframe3D}
                   showTangent={showTangent3D}
                   showDerivative={showDerivative3D}
+                  onShowVolumeChange={setShowVolume3D}
+                  onShowGridChange={setShowGrid3D}
+                  onShowWireframeChange={setShowWireframe3D}
+                  onShowTangentChange={setShowTangent3D}
+                  onShowDerivativeChange={setShowDerivative3D}
                   markedX={markedX3D}
                   markedY={markedY3D}
                   riemannRects={riemannBars3DRects}

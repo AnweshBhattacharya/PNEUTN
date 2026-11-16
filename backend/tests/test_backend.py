@@ -59,7 +59,40 @@ class TestSafeParse:
     def test_reject_too_long(self):
         from safe_parse import safe_parse, ExpressionError
         with pytest.raises(ExpressionError):
-            safe_parse("x" * 201)
+            safe_parse("x" * 501)
+
+    def test_auto_correct_and_complex_expressions(self):
+        from safe_parse import safe_parse, suggest_auto_fix
+        import sympy
+        # Variable directly before paren x(x+1) -> x*(x+1)
+        p1 = safe_parse("x(x+1)")
+        assert p1 == sympy.sympify("x*(x+1)")
+        
+        # 2x(x+1)
+        p2 = safe_parse("2x(x+1)")
+        assert p2 == sympy.sympify("2*x*(x+1)")
+
+        # Equation assignment prefix stripping: f(x) = x^2 + 1
+        p3 = safe_parse("f(x) = x^2 + 1")
+        assert p3 == sympy.sympify("x^2 + 1")
+
+        # Unclosed paren auto-balance
+        p4 = safe_parse("3*(x^2 + 1")
+        assert p4 == sympy.sympify("3*(x^2 + 1)")
+
+        # Complex problem > 200 chars parses without error
+        long_expr = (
+            "sin(x)*cos(y) + exp(-x^2 - y^2)*tan(x/(1+y^2)) + "
+            "3*x^3*y - 2*x*y^3 + sqrt(x^2 + y^2 + 1) + "
+            "log(x^2 + y^2 + 2)/(x^2 + y^2 + 1) + 4*x^2 - 5*y^2 + "
+            "sin(2*x)*cos(3*y) + exp(-x)*sinh(y) + (x^4 + y^4)/(1 + x^2 + y^2)"
+        )
+        assert len(long_expr) > 200
+        p_long = safe_parse(long_expr)
+        assert p_long is not None
+
+        # suggest_auto_fix returns None for already valid expr
+        assert suggest_auto_fix("x^2 + 1") is None
 
     def test_implicit_multiplication(self):
         from safe_parse import safe_parse

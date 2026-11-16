@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getSuggestions, lastToken, checkBalance, validateExpr } from '../lib/smartSyntax'
+import { getSuggestions, lastToken, checkBalance, validateExpr, autoCorrectExpr, suggestFix } from '../lib/smartSyntax'
 
 describe('smartSyntax', () => {
   describe('getSuggestions', () => {
@@ -70,7 +70,7 @@ describe('smartSyntax', () => {
     })
 
     it('rejects expressions exceeding length limit', () => {
-      const longExpr = 'x+'.repeat(120)
+      const longExpr = 'x+'.repeat(300)
       expect(validateExpr(longExpr)).toMatch(/Expression too long/)
     })
 
@@ -88,6 +88,42 @@ describe('smartSyntax', () => {
       expect(validateExpr('x^2 + 2*x + 1')).toBeNull()
       expect(validateExpr('sin(x) * exp(-x)')).toBeNull()
       expect(validateExpr('sqrt(x^2 + 1)')).toBeNull()
+    })
+  })
+
+  describe('autoCorrectExpr & suggestFix', () => {
+    it('corrects variable directly before parentheses: x(x+1) -> x*(x+1)', () => {
+      expect(autoCorrectExpr('x(x+1)')).toBe('x*(x+1)')
+      expect(autoCorrectExpr('2x(x+1)')).toBe('2*x*(x+1)')
+    })
+
+    it('strips equation prefixes', () => {
+      expect(autoCorrectExpr('y = x^2 + 1')).toBe('x^2 + 1')
+      expect(autoCorrectExpr('f(x) = 3*x + 2')).toBe('3*x + 2')
+      expect(autoCorrectExpr('x^2 - 4 = 0')).toBe('x^2 - 4')
+    })
+
+    it('inserts implicit multiplication between adjacent parentheses', () => {
+      expect(autoCorrectExpr('(x+1)(x+2)')).toBe('(x+1)*(x+2)')
+      expect(autoCorrectExpr('(x+1)sin(x)')).toBe('(x+1)*sin(x)')
+    })
+
+    it('auto-balances trailing unclosed parentheses', () => {
+      expect(autoCorrectExpr('3*(x^2 + 1')).toBe('3*(x^2 + 1)')
+    })
+
+    it('converts function without parentheses: sin x -> sin(x)', () => {
+      expect(autoCorrectExpr('sin x + cos x')).toBe('sin(x) + cos(x)')
+    })
+
+    it('suggests fix when expression can be corrected', () => {
+      const fix = suggestFix('x(x+1)')
+      expect(fix).not.toBeNull()
+      expect(fix.fixedExpr).toBe('x*(x+1)')
+    })
+
+    it('returns null when expression is already clean', () => {
+      expect(suggestFix('x^2 + 2*x + 1')).toBeNull()
     })
   })
 })

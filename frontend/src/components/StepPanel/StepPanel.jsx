@@ -1,10 +1,12 @@
 /**
- * StepPanel — step-by-step solution with KaTeX + substeps + Gemini narration.
+ * StepPanel â€” step-by-step solution with KaTeX + substeps + Gemini narration.
  * Improvements: click-to-pin steps, color-coded rule chips, before/after highlighting.
  */
 import React, { useState } from 'react'
 import katex from 'katex'
 import styles from './StepPanel.module.css'
+import { RULE_BREAKDOWNS, getStepTokens } from './ruleBreakdown'
+import FullScreenSolution from './FullScreenSolution'
 
 // Color palette for each calculus rule type
 const RULE_COLORS = {
@@ -200,7 +202,18 @@ function StepItem({ step, index }) {
   )
 }
 
-export default function StepPanel({ result, steps = [], loading, error, isLocal, operationType, components, narration }) {
+export default function StepPanel({
+  result,
+  steps = [],
+  loading,
+  error,
+  isLocal,
+  operationType,
+  components,
+  narration,
+  suggestion = null,
+  onApplySuggestion = null,
+}) {
   const isEmpty = !loading && !result && steps.length === 0 && !error
   const [copied, setCopied] = useState(false)
 
@@ -219,7 +232,7 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal,
         <span>Solution</span>
         <div className={styles.headerRight}>
           {isLocal && (
-            <span className={styles.localBadge} title="Backend unreachable — using local math.js solver">
+            <span className={styles.localBadge} title="Backend unreachable â€” using local math.js solver">
               local mode
             </span>
           )}
@@ -256,6 +269,21 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal,
         <div className={styles.errorBox} role="alert">
           <span className={styles.errorCode}>Error</span>
           <span className={styles.errorMsg}>{error}</span>
+          {suggestion && (
+            <div className={styles.suggestionRow}>
+              <span className={styles.suggestionLabel}>ðŸ’¡ Suggested auto-fix:</span>
+              <code className={styles.suggestionCode}>{suggestion}</code>
+              {onApplySuggestion && (
+                <button
+                  type="button"
+                  className={styles.suggestionBtn}
+                  onClick={() => onApplySuggestion(suggestion)}
+                >
+                  Apply &amp; Solve
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -299,4 +327,4 @@ export default function StepPanel({ result, steps = [], loading, error, isLocal,
       )}
     </div>
   )
-}
+}

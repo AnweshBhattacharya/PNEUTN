@@ -16,11 +16,12 @@ import { localSolve } from './localSolve'
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
 export class ApiError extends Error {
-  constructor(code, message, status) {
+  constructor(code, message, status, suggestion = null) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.status = status
+    this.suggestion = suggestion
   }
 }
 
@@ -38,6 +39,7 @@ function unwrap(raw) {
         inner?.error || 'http_error',
         inner?.message || `HTTP ${raw.statusCode}`,
         raw.statusCode,
+        inner?.suggestion || null,
       )
     }
     return inner
@@ -80,6 +82,7 @@ async function post(path, body, { timeout = 25000 } = {}) {
         inner?.error || 'http_error',
         inner?.message || `HTTP ${response.status}`,
         response.status,
+        inner?.suggestion || null,
       )
     }
 

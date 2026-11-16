@@ -85,22 +85,27 @@ class ExpressionError(ValueError):
     pass
 
 
-MAX_EXPRESSION_LENGTH = 200
-MAX_EXPRESSION_NODES = 100
+MAX_EXPRESSION_LENGTH = 500
+MAX_EXPRESSION_NODES = 300
 
 
 def _validate_expression_complexity(parsed: sympy.Expr) -> None:
     """Reject expressions that are valid but unreasonably complex to process."""
     node_count = sum(1 for _ in sympy.preorder_traversal(parsed))
     if node_count > MAX_EXPRESSION_NODES:
-        raise ExpressionError("Expression is too complex. Use at most 100 mathematical terms.")
+        raise ExpressionError("Expression is too complex. Use at most 300 mathematical terms.")
 
     if parsed.has(sympy.oo, sympy.zoo, sympy.nan):
         raise ExpressionError("Expression must evaluate to a finite mathematical value.")
 
 
 def _normalize_characters(s: str) -> str:
-    """Normalize Unicode operators, symbols, superscripts, and brackets to ASCII."""
+    """Normalize Unicode operators, symbols, superscripts, brackets, fractions, and equation prefixes."""
+    # 0. Strip leading assignment prefixes: 'y =', 'f(x) =', 'z =', 'df/dx =', 'dy/dx ='
+    s = re.sub(r"^(?:[a-zA-Z](?:\([a-zA-Z\s,]+\))?|d[a-zA-Z]/d[a-zA-Z])\s*=\s*", "", s.strip())
+    # Strip trailing = 0
+    s = re.sub(r"\s*=\s*0\s*$", "", s)
+
     # 1. Unicode multiplication symbols -> *
     s = re.sub(r"[\u00b7\u22c5\u2022\u2219\u2218\u2299\u00d7\u2217\u2062]", "*", s)
 
@@ -125,7 +130,11 @@ def _normalize_characters(s: str) -> str:
     s = re.sub(r"√", "sqrt", s)
     s = re.sub(r"∞", "oo", s)
 
-    # 6. LaTeX residuals like \cdot, \times, \left, \right
+    # 6. LaTeX fractions: \frac{a}{b} -> ((a)/(b))
+    while re.search(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", s):
+        s = re.sub(r"\\frac\{([^{}]+)\}\{([^{}]+)\}", r"((\1)/(\2))", s)
+
+    # 7. LaTeX residuals like \cdot, \times, \left, \right
     s = re.sub(r"\\(?:cdot|times)\b", "*", s)
     s = re.sub(r"\b(?:cdot|times)\b", "*", s)
     s = re.sub(r"\\(?:left|right)\b", "", s)
@@ -133,13 +142,21 @@ def _normalize_characters(s: str) -> str:
     s = re.sub(r"l\s*e\s*f\s*t\s*\(", "(", s, flags=re.IGNORECASE)
     s = re.sub(r"r\s*i\s*g\s*h\s*t\s*\)", ")", s, flags=re.IGNORECASE)
 
-    # 7. Curly braces and brackets -> parentheses
+    # 8. Curly braces and brackets -> parentheses
     s = s.replace("{", "(").replace("}", ")")
     s = s.replace("[", "(").replace("]", ")")
 
-    # 8. Collapse log_(base) -> log_base and fn^(pwr) -> fn^pwr
+    # 9. Collapse log_(base) -> log_base and fn^(pwr) -> fn^pwr
     s = re.sub(r"\blog_\(([a-zA-Z0-9]+)\)", r"log_\1", s)
     s = re.sub(r"\b([a-zA-Z]+)\^\(([0-9]+)\)", r"\1^\2", s)
+
+    # 10. Auto-balance parentheses if unbalanced
+    open_count = s.count("(")
+    close_count = s.count(")")
+    if open_count > close_count:
+        s += ")" * (open_count - close_count)
+    elif close_count > open_count:
+        s = "(" * (close_count - open_count) + s
 
     return s
 
@@ -237,7 +254,68 @@ def _preprocess(expr_string: str) -> str:
         rep = f"({fn}({inner}))**{pwr}"
         s = s[:m.start()] + rep + s[end_paren + 1:]
 
+    # 3. Collapse consecutive duplicate/redundant operators
+    s = re.sub(r"\+\+", "+", s)
+    s = re.sub(r"\+-", "-", s)
+    s = re.sub(r"--", "+", s)
+    s = re.sub(r"//", "/", s)
+
+    # 4. Implicit multiplication enhancements
+    all_math_funcs = set(ALLOWED_FUNCTIONS) | {"log", "ln", "sqrt", "exp", "abs", "sign", "Abs"}
+    funcs_re = "|".join(sorted(all_math_funcs, key=len, reverse=True))
+
+    # 4a. Number followed by letter: 2x -> 2*x
+    s = re.sub(r"(\d)\s*([a-zA-Z])", r"\1*\2", s)
+
+    # 4b. Closing paren followed by opening paren: ) ( -> )*(
+    s = re.sub(r"\)\s*\(", ")*(", s)
+
+    # 4c. Closing paren followed by variable or number: )x -> )*x, )2 -> )*2
+    s = re.sub(r"\)\s*([a-zA-Z0-9])", r")*\1", s)
+
+    # 4d. Closing paren followed by function: )sin( -> )*sin(
+    s = re.sub(rf"\)\s*({funcs_re})\b", r")*\1", s)
+
+    # 4e. Variable followed by opening paren when NOT a recognized function:
+    #     e.g. x(x+1) -> x*(x+1), y(1-y) -> y*(1-y)
+    def _repl_var_paren(m):
+        ident = m.group(1)
+        if ident.lower() in [f.lower() for f in all_math_funcs]:
+            return f"{ident}("
+        return f"{ident}*("
+    s = re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", _repl_var_paren, s)
+
+    # 4f. Math function without parens: e.g. sin x -> sin(x), cos 2x -> cos(2x)
+    s = re.sub(rf"\b({funcs_re})\s+([0-9a-zA-Z]+)(?!\s*\()", r"\1(\2)", s)
+
     return s
+
+
+def suggest_auto_fix(expr_string: str) -> str | None:
+    """
+    Attempt to auto-fix a malformed or invalid expression string.
+    Returns the auto-corrected candidate if it parses cleanly via safe_parse,
+    or None if no valid automatic fix can be found.
+    """
+    if not isinstance(expr_string, str) or not expr_string.strip():
+        return None
+    raw = expr_string.strip()
+    try:
+        # If it already parses cleanly, no fix needed
+        safe_parse(raw)
+        return None
+    except Exception:
+        pass
+
+    try:
+        candidate = _normalize_characters(raw)
+        # Preprocess
+        candidate = _preprocess(candidate)
+        # Verify if candidate parses
+        safe_parse(candidate)
+        return candidate if candidate != raw else None
+    except Exception:
+        return None
 
 
 def safe_parse(expr_string: str) -> sympy.Expr:

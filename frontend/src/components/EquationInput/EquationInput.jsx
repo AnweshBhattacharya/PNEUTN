@@ -10,7 +10,7 @@
  */
 import React, { useEffect, useRef, useState, useMemo } from 'react'
 import 'mathlive'
-import { getSuggestions, lastToken, validateExpr, checkBalance } from '../../lib/smartSyntax'
+import { getSuggestions, lastToken, validateExpr, checkBalance, autoCorrectExpr, suggestFix } from '../../lib/smartSyntax'
 import { normaliseMathExpression, extractVariables } from '../../lib/mathInput'
 import styles from './EquationInput.module.css'
 
@@ -32,38 +32,50 @@ function getExpressionValue(mathfield) {
 }
 
 /**
- * Find the end index of the \\int prefix in a LaTeX string,
- * handling nested braces (e.g. \\int_{\\frac{a}{b}}^{c}).
- * Returns the index right after the prefix, or 0 if no \\int prefix found.
+ * Find the end index of all chained \int prefixes in a LaTeX string,
+ * handling nested braces for double/triple integrals (e.g. \int_0^1 \int_0^2).
  */
 function findIntPrefixEnd(latex) {
-  if (!latex.startsWith('\\int')) return 0
-  let i = 4 // skip past "\\int"
+  if (!latex) return 0
+  let idx = 0
+  let matchedAny = false
+  while (idx < latex.length) {
+    const remaining = latex.slice(idx)
+    const trimmed = remaining.trimStart()
+    if (!trimmed.startsWith('\\int')) break
+    const leadingSpaces = remaining.length - trimmed.length
+    idx += leadingSpaces + 4
+    matchedAny = true
 
-  // Helper: skip a brace-delimited group { ... } respecting nesting
-  function skipBraceGroup() {
-    if (i >= latex.length || latex[i] !== '{') return
-    let depth = 1
-    i++ // skip opening {
-    while (i < latex.length && depth > 0) {
-      if (latex[i] === '{') depth++
-      else if (latex[i] === '}') depth--
-      i++
+    const skipBrace = () => {
+      if (idx >= latex.length || latex[idx] !== '{') return
+      let depth = 1
+      idx++
+      while (idx < latex.length && depth > 0) {
+        if (latex[idx] === '{') depth++
+        else if (latex[idx] === '}') depth--
+        idx++
+      }
+    }
+
+    // Optional subscript and superscript (in either order)
+    for (let k = 0; k < 2; k++) {
+      if (idx < latex.length && (latex[idx] === '_' || latex[idx] === '^')) {
+        idx++
+        skipBrace()
+      }
     }
   }
+  return matchedAny ? idx : 0
+}
 
-  // Optional subscript: _{...}
-  if (i < latex.length && latex[i] === '_') {
-    i++ // skip _
-    skipBraceGroup()
-  }
-  // Optional superscript: ^{...}
-  if (i < latex.length && latex[i] === '^') {
-    i++ // skip ^
-    skipBraceGroup()
-  }
-
-  return i
+function buildIntegralLatexPrefix(seq) {
+  if (!seq || seq.length === 0) return '\\int'
+  return seq.map(step => (
+    step?.boundsEnabled && step?.boundLo && step?.boundHi
+      ? `\\int_{${step.boundLo}}^{${step.boundHi}}`
+      : '\\int'
+  )).join(' ')
 }
 
 // Greek / special symbols that MathLive accepts as LaTeX shortcuts
@@ -115,6 +127,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
   const [suggestions, setSuggestions]   = useState([])
   const [activeSuggestion, setActiveSuggestion] = useState(-1)
   const [balanceError, setBalanceError] = useState(null)
+  const [fixSuggestion, setFixSuggestion] = useState(null)
 
   // Category + operation — derive category from operation
   const [operation, setOperation]       = useState('derivative')
@@ -216,10 +229,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       requestAnimationFrame(() => {
         const currentExpr = getExpressionValue(mf)
         if (!currentExpr || currentExpr === 'int') {
-          const step = integrationSequence[0]
-          const prefix = step.boundsEnabled && step.boundLo && step.boundHi
-            ? `\\int_{${step.boundLo}}^{${step.boundHi}}`
-            : '\\int'
+          const prefix = buildIntegralLatexPrefix(integrationSequence)
           mf.value = prefix
           try { setLatexValue(mf.getValue('latex') || '') } catch {}
           lastSentRef.current = ''
@@ -228,10 +238,11 @@ export default function EquationInput({ value, onChange, onSolve, loading,
         }
       })
     } else if (operation !== 'integral' && prevOperationRef.current === 'integral') {
-      // Leaving integral mode — strip leading \int prefix (with optional bounds)
+      // Leaving integral mode — strip leading \int prefixes (with optional bounds)
       requestAnimationFrame(() => {
         const currentLatex = mf.getValue('latex') || ''
-        const stripped = currentLatex.replace(/^\\int(_\{[^}]*\}(\^\{[^}]*\})?)?\s*/, '').trim()
+        const end = findIntPrefixEnd(currentLatex)
+        const stripped = end > 0 ? currentLatex.slice(end).trim() : currentLatex
         if (stripped !== currentLatex) {
           mf.value = stripped
           try { setLatexValue(mf.getValue('latex') || '') } catch {}
@@ -242,7 +253,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       })
     }
     prevOperationRef.current = operation
-  }, [operation])
+  }, [operation, integrationSequence])
 
   // Update integral symbol in field when bounds toggle or values change
   const prevIntSeqRef = useRef(integrationSequence)
@@ -261,25 +272,19 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     const mf = mlRef.current
     if (!mf) return
     requestAnimationFrame(() => {
-      const step = curr[0]
-      const prefix = step.boundsEnabled && step.boundLo && step.boundHi
-        ? `\\int_{${step.boundLo}}^{${step.boundHi}}`
-        : '\\int'
-
+      const prefix = buildIntegralLatexPrefix(curr)
       const currentLatex = mf.getValue('latex') || ''
 
       // Match \\int with optional subscript/superscript (handles nested braces)
-      // We use a function to find the matching brace rather than a naive [^}]*
       const intPrefixEnd = findIntPrefixEnd(currentLatex)
       let newLatex
       if (intPrefixEnd > 0) {
         // Replace existing \int prefix with updated one
-        newLatex = prefix + currentLatex.slice(intPrefixEnd)
+        newLatex = prefix + (currentLatex.slice(intPrefixEnd).startsWith(' ') ? '' : ' ') + currentLatex.slice(intPrefixEnd).trimStart()
       } else if (currentLatex === '') {
         newLatex = prefix
       } else {
         // No existing \int prefix — don't prepend one
-        // (user is typing a normal expression, don't mess with it)
         return
       }
 
@@ -297,6 +302,8 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     setLatexValue(ltx)
     const bal = checkBalance(rawExpr)
     setBalanceError(bal.balanced ? null : bal.message)
+    const fix = suggestFix(rawExpr)
+    setFixSuggestion(fix && fix.fixedExpr !== rawExpr ? fix : null)
     setSuggestions(getSuggestions(lastToken(rawExpr)))
     // Update our tracking ref BEFORE calling onChange so the sync effect doesn't fire
     lastSentRef.current = rawExpr
@@ -351,6 +358,19 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     onChange?.(getExpressionValue(mf), mf.getValue('latex'))
   }
 
+  const applyAutoFix = (fixed) => {
+    if (!mlRef.current) return
+    const mf = mlRef.current
+    mf.value = fixed
+    try { setLatexValue(mf.getValue('latex') || '') } catch {}
+    const ascii = getExpressionValue(mf)
+    lastSentRef.current = ascii
+    onChange?.(ascii, mf.getValue('latex'))
+    setFixSuggestion(null)
+    setBalanceError(null)
+    mf.focus()
+  }
+
   const handleSolve = () => {
     setBalanceError(null)
 
@@ -400,6 +420,17 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     // ── Scalar operations ─────────────────────────────────────────────
     if (!mlRef.current) return
     let expr = normaliseMathExpression(getExpressionValue(mlRef.current) || value || '')
+
+    // Auto-correct common syntax mistakes before submitting
+    const fix = suggestFix(expr)
+    if (fix && fix.fixedExpr) {
+      expr = fix.fixedExpr
+      if (mlRef.current) {
+        mlRef.current.value = expr
+        try { setLatexValue(mlRef.current.getValue('latex') || '') } catch {}
+      }
+      setFixSuggestion(null)
+    }
 
     // ── Detect d/dx notation typed directly in the field ──
     // Handles: d/dx(expr), d/dx expr, (d)/(d x) expr, \frac{d}{dx} expr, d^2/dx^2(expr), etc.
@@ -846,6 +877,20 @@ export default function EquationInput({ value, onChange, onSolve, loading,
         {balanceError && (
           <p className={styles.errorHint} role="alert">{balanceError}</p>
         )}
+        {fixSuggestion && (
+          <div className={styles.autoFixPill} role="status">
+            <span className={styles.autoFixText}>
+              💡 <strong>Auto-fix:</strong> {fixSuggestion.fixedExpr}
+            </span>
+            <button
+              type="button"
+              className={styles.autoFixBtn}
+              onClick={() => applyAutoFix(fixSuggestion.fixedExpr)}
+            >
+              Apply Fix
+            </button>
+          </div>
+        )}
         {suggestions.length > 0 && (
           <ul className={styles.suggestions} role="listbox"
             aria-activedescendant={activeSuggestion >= 0 ? `sugg-${activeSuggestion}` : undefined}>
@@ -889,11 +934,7 @@ export default function EquationInput({ value, onChange, onSolve, loading,
             className={styles.viewGraphBtn}
             onClick={() => {
               onViewGraph?.()
-              // On desktop, also scroll the graph section into view
-              const graphSection = document.querySelector('[class*="bottomRow"]')
-              if (graphSection) {
-                graphSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
+              document.getElementById('graph-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }}
             type="button"
             aria-label="View graph"

@@ -204,6 +204,29 @@
   color: var(--content-primary);
 }
 
+.shareBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--content-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 0 8px;
+  border-radius: 0;
+  cursor: pointer;
+  height: 30px;
+  flex-shrink: 0;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+}
+.shareBtn:hover {
+  background: var(--surface-hover);
+  color: var(--content-primary);
+  border-color: var(--content-primary);
+}
+
 /* ── Loading banner ────────────────────────────────────────────────────── */
 .loadingBanner {
   flex-shrink: 0;

@@ -12,6 +12,7 @@
  */
 import * as math from 'mathjs'
 import { compileExpr } from './mathEval'
+import { autoCorrectExpr } from './smartSyntax'
 
 // ── LaTeX helpers ─────────────────────────────────────────────────────────
 
@@ -400,15 +401,16 @@ export function localSolve({
 }) {
   const actualWrtSeq = wrtSequence || wrt_sequence
   const actualIntSeq = integrationSequence || integration_sequence
+  const cleanExpr = autoCorrectExpr(expr) || expr
 
   try {
     // Keep offline mode inside the same expression grammar as the graph and
     // backend. The raw math.js helpers below are used only after this guard.
-    if (!compileExpr(expr)) {
+    if (!compileExpr(cleanExpr)) {
       throw new Error('Enter a supported mathematical expression.')
     }
     if (operation === 'total_derivative') {
-      const { resultLatex, finalExpr, steps } = totalDerivativeSteps(expr, wrt)
+      const { resultLatex, finalExpr, steps } = totalDerivativeSteps(cleanExpr, wrt)
       return {
         result_latex: resultLatex ?? toLatex(finalExpr),
         result_numeric_sample: numericSample(finalExpr, wrt),
@@ -417,7 +419,7 @@ export function localSolve({
       }
     } else if (operation === 'derivative') {
       const primaryWrt = actualWrtSeq?.[actualWrtSeq.length - 1] || wrt
-      const { finalExpr, steps } = derivativeSteps(expr, wrt, order, actualWrtSeq)
+      const { finalExpr, steps } = derivativeSteps(cleanExpr, wrt, order, actualWrtSeq)
       return {
         result_latex: toLatex(finalExpr),
         result_numeric_sample: numericSample(finalExpr, primaryWrt),
@@ -425,11 +427,11 @@ export function localSolve({
         _local: true,
       }
     } else if (operation === 'ode') {
-      return localOde({ ode: ode || expr, rhs, wrt })
+      return localOde({ ode: ode || cleanExpr, rhs, wrt })
     } else {
       const primaryWrt = actualIntSeq?.[actualIntSeq.length - 1]?.wrt || wrt
       const finalBounds = actualIntSeq?.[actualIntSeq.length - 1]?.bounds ?? bounds
-      const { resultLatex, finalExpr, steps } = integralSteps(expr, primaryWrt, finalBounds)
+      const { resultLatex, finalExpr, steps } = integralSteps(cleanExpr, primaryWrt, finalBounds)
       return {
         result_latex: resultLatex ?? toLatex(finalExpr),
         result_numeric_sample: numericSample(finalExpr, primaryWrt),

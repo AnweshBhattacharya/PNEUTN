@@ -1165,6 +1165,64 @@ export default function GraphCanvas3D({
               )}
             </span>
           )}
+          {/* 3D controls dropdown button */}
+          <div className={styles.ctrlWrap}>
+            <button
+              className={`${styles.toolBtn} ${controlsOpen ? styles.toolBtnActive : ''}`}
+              onClick={() => setControlsOpen(o => !o)}
+              title="3D surface controls"
+              aria-label="Toggle 3D controls"
+              aria-expanded={controlsOpen}
+              type="button"
+            >
+              <span className="material-symbols-outlined">settings</span>
+            </button>
+            {controlsOpen && (
+              <>
+                <div className={styles.ctrlOverlay} onClick={() => setControlsOpen(false)} />
+                <div className={styles.ctrlDropdown}>
+                  {[
+                    { label: 'Surface Grid',              value: showGrid,          cb: onShowGridChange },
+                    { label: 'Wireframe Mesh',            value: showWireframe,     cb: onShowWireframeChange },
+                    { label: 'Tangent Plane & ∇',         value: showTangent,       cb: onShowTangentChange },
+                    { label: 'Derivative Slices (fx,fy)', value: showDerivative,    cb: onShowDerivativeChange },
+                    { label: 'Volume Under Surface',      value: showVolume,        cb: onShowVolumeChange },
+                    {
+                      label: 'Riemann Bars (3D)',
+                      value: showRiemannBars,
+                      cb: (val) => {
+                        onToggleRiemannBars?.(val)
+                        if (val && (!riemannRects || riemannRects.length === 0)) {
+                          onRequestRiemann?.()
+                        }
+                      },
+                    },
+                    { label: 'Auto-Rotation',             value: autoRotate,        cb: setAutoRotate },
+                    ...(vectorVisConfig ? [{
+                      label: '3D Vector Arrows (∇)',
+                      value: showVectorArrows,
+                      cb: setShowVectorArrows,
+                    }] : []),
+                    ...(odeVisConfig ? [{
+                      label: '3D Trajectories & Phase',
+                      value: showOdeCurves,
+                      cb: setShowOdeCurves,
+                    }] : []),
+                  ].map(({ label, value, cb }) => (
+                    <label key={label} className={styles.ctrlRow}>
+                      <input
+                        type="checkbox"
+                        className={styles.ctrlCheck}
+                        checked={!!value}
+                        onChange={e => cb?.(e.target.checked)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <button className={styles.toolBtn}
             onClick={() => { rotRef.current = { ...DEFAULT_ROT } }}
             title="Reset view">
@@ -1187,58 +1245,6 @@ export default function GraphCanvas3D({
         <div className={styles.colorBarGradient} />
         <span className={styles.colorBarLabel}>high</span>
       </div>
-
-      {/* ── Riemann Bars toggle (task 15.4) ── */}
-      <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
-          <input
-            type="checkbox"
-            checked={showRiemannBars}
-            onChange={e => {
-              onToggleRiemannBars?.(e.target.checked)
-              if (e.target.checked && (!riemannRects || riemannRects.length === 0)) {
-                onRequestRiemann?.()
-              }
-            }}
-            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-          />
-          Show Riemann Bars
-        </label>
-        {riemannError && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--color-error)', marginLeft: 8 }}>
-            {riemannError}
-          </span>
-        )}
-      </div>
-
-      {/* ── Vector / ODE 3D Layer Toggles ── */}
-      {vectorVisConfig && (
-        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
-            <input
-              type="checkbox"
-              checked={showVectorArrows}
-              onChange={e => setShowVectorArrows(e.target.checked)}
-              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-            />
-            Show 3D Vector Arrows (∇)
-          </label>
-        </div>
-      )}
-
-      {odeVisConfig && (
-        <div style={{ padding: '4px 8px', borderBottom: '1px solid var(--border-color)', background: 'var(--surface-raised)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--content-secondary)' }}>
-            <input
-              type="checkbox"
-              checked={showOdeCurves}
-              onChange={e => setShowOdeCurves(e.target.checked)}
-              style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-            />
-            Show 3D Integral Curves &amp; Phase Trajectories
-          </label>
-        </div>
-      )}
 
       <div className={styles.canvas} ref={mountRef} style={{ position: 'relative' }}>
         {hasError && (

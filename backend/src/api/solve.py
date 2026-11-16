@@ -26,7 +26,7 @@ from sympy import (
     Rational, Integer,
 )
 
-from safe_parse import safe_parse, safe_parse_ode, ExpressionError
+from safe_parse import safe_parse, safe_parse_ode, suggest_auto_fix, ExpressionError
 from computation_guard import ComputationTimeout, calculation_timeout
 
 logger = logging.getLogger(__name__)
@@ -1020,11 +1020,14 @@ def _numeric_sample(result: sympy.Expr, wrt: Symbol, n: int = 7,
 
 # ── Error helper ────────────────────────────────────────────────────────────
 
-def _error(code: str, message: str, status: int = 422) -> dict:
+def _error(code: str, message: str, status: int = 422, suggestion: str = None) -> dict:
+    payload = {"error": code, "message": message}
+    if suggestion:
+        payload["suggestion"] = suggestion
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps({"error": code, "message": message}),
+        "body": json.dumps(payload),
     }
 
 
@@ -1121,7 +1124,8 @@ def handle(body: dict) -> dict:
     try:
         expr = safe_parse(expr_str)
     except ExpressionError as e:
-        return _error("invalid_expression", str(e))
+        suggestion = suggest_auto_fix(expr_str)
+        return _error("invalid_expression", str(e), suggestion=suggestion)
 
     try:
         if operation == "derivative":
