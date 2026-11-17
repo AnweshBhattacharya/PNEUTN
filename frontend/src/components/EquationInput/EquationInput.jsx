@@ -42,9 +42,18 @@ function findIntPrefixEnd(latex) {
   while (idx < latex.length) {
     const remaining = latex.slice(idx)
     const trimmed = remaining.trimStart()
-    if (!trimmed.startsWith('\\int')) break
     const leadingSpaces = remaining.length - trimmed.length
-    idx += leadingSpaces + 4
+
+    let intCommandLen = 0
+    if (trimmed.startsWith('\\iiint')) intCommandLen = 6
+    else if (trimmed.startsWith('\\iint')) intCommandLen = 5
+    else if (trimmed.startsWith('\\int')) intCommandLen = 4
+    else if (trimmed.startsWith('∭')) intCommandLen = 1
+    else if (trimmed.startsWith('∬')) intCommandLen = 1
+    else if (trimmed.startsWith('∫')) intCommandLen = 1
+
+    if (intCommandLen === 0) break
+    idx += leadingSpaces + intCommandLen
     matchedAny = true
 
     const skipBrace = () => {
@@ -71,6 +80,11 @@ function findIntPrefixEnd(latex) {
 
 function buildIntegralLatexPrefix(seq) {
   if (!seq || seq.length === 0) return '\\int'
+  const hasBounds = seq.some(step => step?.boundsEnabled && step?.boundLo && step?.boundHi)
+  if (!hasBounds) {
+    if (seq.length === 2) return '\\iint'
+    if (seq.length >= 3) return '\\iiint'
+  }
   return seq.map(step => (
     step?.boundsEnabled && step?.boundLo && step?.boundHi
       ? `\\int_{${step.boundLo}}^{${step.boundHi}}`
@@ -88,6 +102,8 @@ const SYMBOL_SHORTCUTS = [
   { label: 'e',  latex: 'e',       ascii: 'e'   },
   { label: '∞',  latex: '\\infty', ascii: 'oo'  },
   { label: 'x²', latex: 'x^{2}',  ascii: 'x^2' },
+  { label: '∬',  latex: '\\iint',  ascii: 'iint' },
+  { label: '∭',  latex: '\\iiint', ascii: 'iiint' },
 ]
 
 // Category → operations map
@@ -325,7 +341,27 @@ export default function EquationInput({ value, onChange, onSolve, loading,
       if (tMatch) setTotalWrt(tMatch[1] || tMatch[2])
     }
 
-    // ── Auto-detect integration order from trailing dx/dy/dz ──
+    // ── Auto-detect integral mode & order from \iint, \iiint or trailing dx/dy/dz ──
+    const hasTriple = (ltx && ltx.includes('\\iiint')) || rawExpr.includes('∭')
+    const hasDouble = !hasTriple && ((ltx && ltx.includes('\\iint')) || rawExpr.includes('∬'))
+
+    if (hasTriple || hasDouble) {
+      if (operation !== 'integral') setOperation('integral')
+      const targetLen = hasTriple ? 3 : 2
+      if (integrationSequence.length !== targetLen) {
+        setIntegrationSequence(prev => {
+          const defaults = ['x', 'y', 'z']
+          const next = Array.from({ length: targetLen }, (_, i) => ({
+            wrt: prev[i]?.wrt || defaults[i] || 'x',
+            boundsEnabled: prev[i]?.boundsEnabled || false,
+            boundLo: prev[i]?.boundLo || '0',
+            boundHi: prev[i]?.boundHi || '1',
+          }))
+          return next
+        })
+      }
+    }
+
     if (operation === 'integral') {
       const lower = rawExpr.replace(/\s+/g, '')
       const diffMatch = lower.match(/d([xyzt])(?:d([xyzt]))?(?:d([xyzt]))?$/)
@@ -475,8 +511,8 @@ export default function EquationInput({ value, onChange, onSolve, loading,
     // as navigation shortcuts — they're encoded in integrationSequence, not the expression
     if (effectiveOperation === 'integral') {
       expr = expr.replace(/\s*d[xyzt](\s*d[xyzt])*\s*$/i, '').trim()
-      // Also strip leading integral sign if present (MathLive may serialize \int as 'int')
-      expr = expr.replace(/^\s*int\s*/i, '').trim()
+      // Also strip leading integral sign if present (MathLive may serialize as 'int', 'iint', 'iiint', or unicode)
+      expr = expr.replace(/^\s*(?:\\?iiint|\\?iint|\\?int(?:\s+\\?int)*|[∬∭∫]+)\s*/i, '').trim()
     }
     const err = validateExpr(expr)
     if (err) { setBalanceError(err); return }
@@ -934,7 +970,9 @@ export default function EquationInput({ value, onChange, onSolve, loading,
             className={styles.viewGraphBtn}
             onClick={() => {
               onViewGraph?.()
-              document.getElementById('graph-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              setTimeout(() => {
+                document.getElementById('graph-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 60)
             }}
             type="button"
             aria-label="View graph"

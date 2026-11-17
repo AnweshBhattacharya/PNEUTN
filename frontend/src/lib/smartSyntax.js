@@ -134,6 +134,7 @@ export function autoCorrectExpr(expr) {
     s = s.replaceAll(sup, rep)
   }
   s = s.replace(/π/g, 'pi').replace(/φ/g, 'phi').replace(/θ/g, 'theta').replace(/√/g, 'sqrt').replace(/∞/g, 'oo')
+  s = s.replace(/^[∬∭∫]+\s*/, '')
 
   // LaTeX fractions \frac{a}{b} -> ((a)/(b))
   while (/\\frac\{([^{}]+)\}\{([^{}]+)\}/.test(s)) {

@@ -51,6 +51,24 @@ describe('UI Components', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Syntax error')
     })
 
+    it('renders suggestion pill and applies suggestion when clicked', () => {
+      const handleApply = vi.fn()
+      render(
+        <StepPanel
+          error="Syntax error"
+          suggestion="x*(x+1)"
+          onApplySuggestion={handleApply}
+          steps={[]}
+          loading={false}
+        />
+      )
+      expect(screen.getByText(/Suggested auto-fix/i)).toBeInTheDocument()
+      expect(screen.getByText('x*(x+1)')).toBeInTheDocument()
+      const applyBtn = screen.getByRole('button', { name: /Apply & Solve/i })
+      fireEvent.click(applyBtn)
+      expect(handleApply).toHaveBeenCalledWith('x*(x+1)')
+    })
+
     it('renders steps and toggles step expansion', () => {
       const steps = [
         {

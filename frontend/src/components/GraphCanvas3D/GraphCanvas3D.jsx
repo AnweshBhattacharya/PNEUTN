@@ -673,6 +673,12 @@ export default function GraphCanvas3D({
     if (wireMeshRef.current) wireMeshRef.current.visible = showWireframe
   }, [showWireframe])
 
+  useEffect(() => {
+    if (tangentPlaneRef.current && !showTangent) {
+      tangentPlaneRef.current.visible = false
+    }
+  }, [showTangent])
+
   // ── Update surface Z + vertex positions/colours + skirt + floor ────────
   useEffect(() => {
     if (!posAttrRef.current || !colAttrRef.current) return

@@ -116,6 +116,12 @@ describe('smartSyntax', () => {
       expect(autoCorrectExpr('sin x + cos x')).toBe('sin(x) + cos(x)')
     })
 
+    it('strips leading unicode integral symbols (∬, ∭, ∫)', () => {
+      expect(autoCorrectExpr('∬ x*y')).toBe('x*y')
+      expect(autoCorrectExpr('∭ x*y*z')).toBe('x*y*z')
+      expect(autoCorrectExpr('∫ x^2')).toBe('x^2')
+    })
+
     it('suggests fix when expression can be corrected', () => {
       const fix = suggestFix('x(x+1)')
       expect(fix).not.toBeNull()

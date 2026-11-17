@@ -259,6 +259,7 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
   /* Smooth theme transitions */
   transition: background-color var(--duration-base) var(--ease-out),
               color var(--duration-base) var(--ease-out);

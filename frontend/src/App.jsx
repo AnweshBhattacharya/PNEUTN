@@ -295,7 +295,8 @@ export default function App() {
     try {
       const params = new URLSearchParams()
       if (activeEq?.expr) params.set('expr', activeEq.expr)
-      if (operationMode) params.set('op', operationMode)
+      const op = activeEq?.operationType || (operationMode === 'scalar' ? 'derivative' : operationMode.replace('vector_', ''))
+      if (op) params.set('op', op)
       const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(url)
@@ -303,7 +304,7 @@ export default function App() {
         setTimeout(() => setCopiedShare(false), 2000)
       }
     } catch {}
-  }, [activeEq?.expr, operationMode])
+  }, [activeEq?.expr, activeEq?.operationType, operationMode])
 
   // Read URL search params on mount: e.g. ?expr=x^2&op=derivative
   useEffect(() => {
